@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Writer</title>
+  <style>
+    :root{color-scheme:light dark;font:16px/1.45 system-ui,sans-serif}
+    body{max-width:1100px;margin:0 auto;padding:24px}
+    header{display:flex;align-items:baseline;gap:16px}
+    .muted{color:#777}.grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+    section{border:1px solid #8886;border-radius:12px;padding:18px}
+    label{display:block;margin-top:12px;font-weight:650}
+    input,select,textarea,button{font:inherit}
+    input,select,textarea{box-sizing:border-box;width:100%;padding:9px;margin-top:5px}
+    textarea{min-height:160px;resize:vertical}
+    button{margin:12px 8px 0 0;padding:8px 12px}
+    #status{min-height:1.5em}pre{white-space:pre-wrap;overflow-wrap:anywhere}
+    .wide{grid-column:1/-1}
+    @media(max-width:760px){.grid{grid-template-columns:1fr}.wide{grid-column:auto}}
+  </style>
+</head>
+<body>
+  <header><h1>Writer</h1><span class="muted">Local prose and scripts</span></header>
+  <p id="status" role="status">Ready. Connect an AI through Writer's MCP server, or work manually.</p>
+  <div class="grid">
+    <section>
+      <h2>Draft</h2>
+      <label>Kind
+        <select id="kind"><option>tweet</option><option>thread</option><option selected>blog</option><option>newsletter</option></select>
+      </label>
+      <label>Title<input id="title"></label>
+      <label>Brief<textarea id="brief" placeholder="What should this piece do?"></textarea></label>
+      <label>Draft<textarea id="draft" placeholder="Start writing. Uoink is optional."></textarea></label>
+      <label>Uoink item ID<input id="uoink-id" placeholder="Optional"></label>
+      <button id="attach">Attach Uoink source</button>
+      <button id="prepare">Prepare AI context</button>
+      <button id="save-draft">Save draft</button>
+      <div id="sources" class="muted">No sources attached.</div>
+    </section>
+    <section>
+      <h2>Script</h2>
+      <label>Hook<input id="hook"></label>
+      <label>Format<input id="format" value="talking_head"></label>
+      <label>Body<textarea id="script-body"></textarea></label>
+      <label>CTA<input id="cta"></label>
+      <button id="save-script">Save script</button>
+      <label>Shot-list file<input id="shot-output" placeholder="C:\path\shot-list.md"></label>
+      <button id="export-script">Derive shots and save file</button>
+      <p class="muted">The saved Markdown file remains usable when other products are stopped.</p>
+    </section>
+    <section>
+      <h2>Voice DNA</h2>
+      <label>Text to scan<textarea id="voice-text"></textarea></label>
+      <button id="scan">Scan locally</button>
+      <pre id="warnings">No scan yet.</pre>
+    </section>
+    <section>
+      <h2>Prepared context</h2>
+      <pre id="prompt">Nothing prepared yet.</pre>
+    </section>
+    <section class="wide">
+      <h2>Local access</h2>
+      <p class="muted">Writer accepts its local credential from the URL fragment printed by <code>writer serve</code>. The fragment is removed from the address bar and kept in this tab.</p>
+      <label>Credential<input id="credential" type="password" autocomplete="off"></label>
+    </section>
+  </div>
+  <script>
+    const $=id=>document.getElementById(id);
+    const hash=new URLSearchParams(location.hash.slice(1));
+    if(hash.get("token")){sessionStorage.setItem("writer-token",hash.get("token"));history.replaceState(null,"",location.pathname)}
+    $("credential").value=sessionStorage.getItem("writer-token")||"";
+    $("credential").onchange=()=>sessionStorage.setItem("writer-token",$("credential").value);
+    const sources=[];let scriptId=null;
+    async function api(path,body){
+      const response=await fetch("/api/writer/v1"+path,{method:"POST",headers:{"Content-Type":"application/json","X-Writer-Token":$("credential").value},body:JSON.stringify(body)});
+      const data=await response.json();if(!data.ok)throw new Error(data.error?.message||"Request failed");return data.data
+    }
+    function note(text){$("status").textContent=text}
+    $("attach").onclick=async()=>{try{const data=await api("/sources/uoink",{item_id:$("uoink-id").value});sources.push(data.source);$("sources").textContent=sources.map(x=>x.title||x.provider_ref).join(", ");note("Source attached. Your draft text was not changed.")}catch(e){note(e.message)}};
+    $("prepare").onclick=async()=>{try{const data=await api("/prepare",{kind:$("kind").value,brief:$("brief").value,draft_text:$("draft").value,sources});$("prompt").textContent=JSON.stringify(data.prompt,null,2);note("Context prepared. No model was called.")}catch(e){note(e.message)}};
+    $("save-draft").onclick=async()=>{try{const data=await api("/drafts",{kind:$("kind").value,title:$("title").value,body:$("draft").value,sources});note("Draft saved locally as #"+data.draft.id)}catch(e){note(e.message)}};
+    $("save-script").onclick=async()=>{try{const data=await api("/scripts",{hook:$("hook").value,format:$("format").value,body:$("script-body").value,cta:$("cta").value,sources});scriptId=data.script.id;note("Script saved locally as #"+scriptId)}catch(e){note(e.message)}};
+    $("export-script").onclick=async()=>{try{if(!scriptId)throw new Error("Save the script first.");const derived=await api("/scripts/"+scriptId+"/derive-shots",{});scriptId=derived.script.id;await api("/scripts/"+scriptId+"/export",{output:$("shot-output").value});note("Versioned shot-list file saved.")}catch(e){note(e.message)}};
+    $("scan").onclick=async()=>{try{const data=await api("/voice/scan",{text:$("voice-text").value});$("warnings").textContent=JSON.stringify(data.warnings,null,2);note("Voice scan finished locally. No model was called.")}catch(e){note(e.message)}};
+  </script>
+</body>
+</html>
