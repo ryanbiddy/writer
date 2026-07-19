@@ -45,7 +45,9 @@ writer serve
 Writer accepts only the versioned `uoink.corpus.read` v1 contract. It never
 opens Uoink's database or token file. Saved source snapshots contain an opaque
 `uoink://item/<id>` reference plus bounded display and credit fields, so a
-draft reopens without Uoink.
+draft reopens without Uoink. A snapshot source URL is either null or an
+absolute HTTP(S) URL; Writer rejects file URLs, filesystem paths, and other
+schemes at both the Uoink response boundary and its own storage schema.
 
 ## Ownership
 

@@ -57,6 +57,38 @@ def test_uoink_reference_is_opaque_and_portable():
     assert "path" not in source.to_dict()
 
 
+def test_source_url_defaults_to_null():
+    source = SourceSnapshot(provider="original").validate()
+    assert source.source_url is None
+    assert source.to_dict()["source_url"] is None
+
+
+def test_legacy_blank_source_url_normalizes_to_null_on_read():
+    source = SourceSnapshot.from_dict({
+        "provider": "original",
+        "source_url": "",
+    })
+    assert source.source_url is None
+    assert source.to_dict()["source_url"] is None
+
+
+@pytest.mark.parametrize("source_url", [
+    "",
+    "file:///tmp/source.md",
+    "C:\\Users\\Ryan\\source.md",
+    "/tmp/source.md",
+    "ftp://example.test/source.md",
+    "https://",
+    "https://example.test/bad path",
+])
+def test_source_url_must_be_null_or_http(source_url):
+    with pytest.raises(SchemaError, match=r"null or an HTTP\(S\) URL"):
+        SourceSnapshot(
+            provider="paste",
+            source_url=source_url,
+        ).validate()
+
+
 @pytest.mark.parametrize(
     "provider_ref",
     (

@@ -18,6 +18,7 @@ from typing import Any
 
 from writer.schemas import (
     AssemblyQuery,
+    is_valid_source_url,
     SourceSnapshot,
     UOINK_CONTRACT,
     UOINK_CONTRACT_VERSION,
@@ -150,6 +151,12 @@ def _nullable_string(value: Any, label: str) -> None:
         raise _mismatch(f"{label} must be a string or null")
 
 
+def _source_url(value: Any, label: str) -> None:
+    if not is_valid_source_url(value):
+        raise _mismatch(
+            f"{label} must be null or an HTTP(S) URL")
+
+
 def _validate_attachment(value: Any) -> None:
     value = _exact(value, ATTACHMENT_KEYS, "attachment")
     for name in ("id", "kind", "role", "media_type", "label", "href"):
@@ -168,10 +175,9 @@ def _validate_item(value: Any) -> None:
         raise _mismatch("item.id must be a non-empty string")
     if not isinstance(value["title"], str):
         raise _mismatch("item.title must be a string")
-    for name in (
-            "author", "source_type", "platform", "source_url",
-            "captured_at"):
+    for name in ("author", "source_type", "platform", "captured_at"):
         _nullable_string(value[name], f"item.{name}")
+    _source_url(value["source_url"], "item.source_url")
     duration = value["duration_seconds"]
     if duration is not None and (
             isinstance(duration, bool)
@@ -179,8 +185,11 @@ def _validate_item(value: Any) -> None:
         raise _mismatch(
             "item.duration_seconds must be a number or null")
     credit = _exact(value["credit"], CREDIT_KEYS, "item.credit")
-    for name, item in credit.items():
+    for name in ("creator", "handle"):
+        item = credit[name]
         _nullable_string(item, f"item.credit.{name}")
+    _source_url(
+        credit["source_url"], "item.credit.source_url")
     facets = _exact(value["facets"], ITEM_FACET_KEYS, "item.facets")
     for name, item in facets.items():
         _nullable_string(item, f"item.facets.{name}")
@@ -781,8 +790,11 @@ class UoinkClient:
         creator = str(
             credit.get("creator") or item.get("author") or "").strip()
         title = str(item.get("title") or "").strip()
-        source_url = str(
-            credit.get("source_url") or item.get("source_url") or "").strip()
+        source_url = (
+            credit.get("source_url")
+            or item.get("source_url")
+            or None
+        )
         external = bool(source_url) or creator.casefold() not in {
             "", "you", "user",
         }
