@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hmac
 import json
+import logging
 import re
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -22,6 +23,14 @@ DEFAULT_PORT = 5181
 MAX_BODY_BYTES = 2 * 1024 * 1024
 CONTRACT = "writer.api"
 VERSION = 1
+ALLOWED_HOST_NAMES = frozenset({
+    DEFAULT_HOST,
+    "localhost",
+    "127.0.0.1",
+    "::1",
+    "[::1]",
+})
+LOG = logging.getLogger(__name__)
 
 
 def _success(**data: Any) -> dict[str, Any]:
@@ -109,6 +118,49 @@ class WriterHandler(BaseHTTPRequestHandler):
         expected = self.server.writer_token
         return bool(supplied) and hmac.compare_digest(supplied, expected)
 
+    def _host_allowed(self) -> bool:
+        """Reject DNS-rebinding requests before any Writer route runs."""
+        host = self.headers.get("Host")
+        if host is None:
+            return True
+        host = host.strip().lower()
+        if host.startswith("["):
+            name, _, port = host.partition("]")
+            name += "]"
+            port = port.lstrip(":")
+        elif host.count(":") == 1:
+            name, _, port = host.partition(":")
+        else:
+            name, port = host, ""
+        if name not in ALLOWED_HOST_NAMES:
+            return False
+        if port:
+            try:
+                bound_port = self.server.server_address[1]
+            except (AttributeError, IndexError, TypeError):
+                bound_port = DEFAULT_PORT
+            if port != str(bound_port):
+                return False
+        return True
+
+    def _reject_bad_host(self) -> bool:
+        if self._host_allowed():
+            return False
+        LOG.warning(
+            "rejected %s %s with non-loopback Host %r",
+            self.command,
+            self.path.split("?", 1)[0],
+            self.headers.get("Host"),
+        )
+        self._json(
+            403,
+            _failure(
+                "forbidden_host",
+                "Request Host must be loopback",
+            ),
+        )
+        return True
+
     def _require_auth(self) -> bool:
         if self._authorized():
             return True
@@ -161,7 +213,14 @@ class WriterHandler(BaseHTTPRequestHandler):
             return
         self._tool_result(result)
 
+    def do_OPTIONS(self):  # noqa: N802
+        if self._reject_bad_host():
+            return
+        self._headers(204, "text/plain; charset=utf-8", 0)
+
     def do_GET(self):  # noqa: N802
+        if self._reject_bad_host():
+            return
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path.rstrip("/") or "/"
         if path == "/":
@@ -269,6 +328,8 @@ class WriterHandler(BaseHTTPRequestHandler):
         self._json(404, _failure("not_found", "Route not found"))
 
     def do_POST(self):  # noqa: N802
+        if self._reject_bad_host():
+            return
         path = urllib.parse.urlparse(self.path).path.rstrip("/")
         if not path.startswith("/api/writer/v1") or not self._require_auth():
             if not path.startswith("/api/writer/v1"):
@@ -340,6 +401,8 @@ class WriterHandler(BaseHTTPRequestHandler):
         self._json(404, _failure("not_found", "Route not found"))
 
     def do_DELETE(self):  # noqa: N802
+        if self._reject_bad_host():
+            return
         path = urllib.parse.urlparse(self.path).path.rstrip("/")
         if not self._require_auth():
             return

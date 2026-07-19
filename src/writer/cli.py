@@ -8,7 +8,7 @@ import sys
 
 from writer import __version__
 from writer import suite_service
-from writer.auth import ensure_token
+from writer.auth import TOKEN_ENV, ensure_token, token_path
 from writer.http_api import DEFAULT_HOST, DEFAULT_PORT, create_server
 from writer.uoink_client import UOINK_TOKEN_ENV, UoinkClient
 
@@ -74,8 +74,11 @@ def main(argv: list[str] | None = None) -> int:
                 file=sys.stderr,
             )
         print(
-            f"Writer is ready at "
-            f"http://127.0.0.1:{actual_port}/#token={token}")
+            f"Writer is ready at http://127.0.0.1:{actual_port}/")
+        if str(os.environ.get(TOKEN_ENV) or "").strip():
+            print(f"Local credential source: {TOKEN_ENV} environment variable")
+        else:
+            print(f"Local credential file: {token_path()}")
         print("Press Ctrl+C to stop.")
         try:
             server.serve_forever()

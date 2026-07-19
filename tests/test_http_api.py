@@ -28,7 +28,7 @@ def writer_http(tmp_path):
         thread.join(timeout=5)
 
 
-def call(port, method, path, body=None, *, token=True):
+def call(port, method, path, body=None, *, token=True, host=None):
     raw = (
         json.dumps(body).encode("utf-8")
         if body is not None else None
@@ -38,6 +38,8 @@ def call(port, method, path, body=None, *, token=True):
         headers["Content-Type"] = "application/json"
     if token:
         headers["X-Writer-Token"] = "writer-test-token"
+    if host is not None:
+        headers["Host"] = host
     request = urllib.request.Request(
         f"http://127.0.0.1:{port}{path}",
         data=raw,
@@ -76,6 +78,57 @@ def test_private_api_rejects_missing_token(writer_http):
     assert status == 401
     assert payload["ok"] is False
     assert payload["error"]["code"] == "unauthorized"
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "body"),
+    [
+        ("GET", "/ping", None),
+        ("POST", "/api/writer/v1/drafts", {
+            "kind": "blog",
+            "title": "Blocked",
+            "body": "Must not save",
+        }),
+        ("DELETE", "/api/writer/v1/voice-samples/1", None),
+        ("OPTIONS", "/api/writer/v1/drafts", None),
+    ],
+)
+def test_rejects_dns_rebinding_host_before_every_route(
+        writer_http, method, path, body):
+    status, payload = call(
+        writer_http,
+        method,
+        path,
+        body,
+        host="evil.attacker.test",
+    )
+    assert status == 403
+    assert payload["error"] == {
+        "code": "forbidden_host",
+        "message": "Request Host must be loopback",
+    }
+
+
+def test_host_guard_accepts_loopback_name_and_bound_port(writer_http):
+    status, ping = call(
+        writer_http,
+        "GET",
+        "/ping",
+        token=False,
+        host=f"localhost:{writer_http}",
+    )
+    assert status == 200
+    assert ping["status"] == "ready"
+
+    status, payload = call(
+        writer_http,
+        "GET",
+        "/ping",
+        token=False,
+        host="127.0.0.1:1",
+    )
+    assert status == 403
+    assert payload["error"]["code"] == "forbidden_host"
 
 
 def test_invalid_request_returns_json_instead_of_dropping_connection(

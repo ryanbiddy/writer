@@ -61,14 +61,12 @@
     </section>
     <section class="wide">
       <h2>Local access</h2>
-      <p class="muted">Writer accepts its local credential from the URL fragment printed by <code>writer serve</code>. The fragment is removed from the address bar and kept in this tab.</p>
+      <p class="muted">Use the local credential source shown by <code>writer serve</code>, then paste its value here. Writer never puts the credential in a URL or prints it to the terminal.</p>
       <label>Credential<input id="credential" type="password" autocomplete="off"></label>
     </section>
   </div>
   <script>
     const $=id=>document.getElementById(id);
-    const hash=new URLSearchParams(location.hash.slice(1));
-    if(hash.get("token")){sessionStorage.setItem("writer-token",hash.get("token"));history.replaceState(null,"",location.pathname)}
     $("credential").value=sessionStorage.getItem("writer-token")||"";
     $("credential").onchange=()=>sessionStorage.setItem("writer-token",$("credential").value);
     const sources=[];let scriptId=null;
