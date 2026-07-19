@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import json
 import os
+import re
+import socket
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -107,6 +109,11 @@ class UoinkContractError(ValueError):
 
 class UoinkUnavailable(RuntimeError):
     """The optional local peer cannot be reached or did not return JSON."""
+
+    def __init__(self, message: str, *, code: str = "unavailable"):
+        super().__init__(message)
+        self.code = code
+        self.retryable = True
 
 
 def _mismatch(message: str) -> UoinkContractError:
@@ -396,7 +403,143 @@ def _loopback_base_url(value: str) -> str:
             "Uoink URL must contain only scheme, host, and port")
     if parsed.port is None:
         raise ValueError("Uoink URL requires a port")
-    return value.rstrip("/")
+    if not 1 <= parsed.port <= 65535:
+        raise ValueError("Uoink URL port is invalid")
+    return str(value).strip().rstrip("/")
+
+
+_ENGAGEMENT_EVENT_KEYS = {
+    "event_id",
+    "item_ref",
+    "event_type",
+    "source_product",
+    "occurred_at",
+}
+_ENGAGEMENT_EVENT_TYPES = {
+    "opened",
+    "search_hit",
+    "search_click",
+    "paste",
+    "cite",
+}
+_ENGAGEMENT_TIMESTAMP = re.compile(
+    r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$"
+)
+
+
+def _validate_engagement_events(events: Any) -> None:
+    if not isinstance(events, list) or not 1 <= len(events) <= 100:
+        raise ValueError("engagement batch must contain 1 through 100 events")
+    for event in events:
+        event = _exact(
+            event,
+            _ENGAGEMENT_EVENT_KEYS,
+            "engagement event",
+        )
+        event_id = event["event_id"]
+        if not isinstance(event_id, str) or not 1 <= len(event_id) <= 128:
+            raise ValueError("engagement event_id is invalid")
+        try:
+            event_id.encode("ascii")
+        except UnicodeEncodeError as error:
+            raise ValueError("engagement event_id is invalid") from error
+        if (
+            not isinstance(event["item_ref"], str)
+            or not event["item_ref"].startswith("uoink://item/")
+        ):
+            raise ValueError("engagement item_ref is invalid")
+        if event["event_type"] not in _ENGAGEMENT_EVENT_TYPES:
+            raise ValueError("engagement event_type is invalid")
+        if event["source_product"] != "writer":
+            raise ValueError("engagement source_product must be writer")
+        occurred_at = event["occurred_at"]
+        if (
+            not isinstance(occurred_at, str)
+            or not _ENGAGEMENT_TIMESTAMP.fullmatch(occurred_at)
+        ):
+            raise ValueError("engagement occurred_at must be RFC 3339 UTC")
+
+
+def validate_engagement_response(
+    payload: Any,
+    *,
+    status: int = 200,
+    submitted: int,
+    event_ids: set[str] | None = None,
+) -> dict:
+    if not isinstance(payload, dict):
+        raise _mismatch("engagement response must be an object")
+    ok = payload.get("ok")
+    expected = (
+        {"ok", "contract", "version", "data"}
+        if ok is True
+        else {"ok", "contract", "version", "error"}
+    )
+    payload = _exact(payload, expected, "engagement response")
+    if (
+        payload["contract"] != "uoink.engagement.ingest"
+        or payload["version"] != 1
+    ):
+        raise _mismatch("engagement response contract must be version 1")
+    if ok is not True:
+        if ok is not False:
+            raise _mismatch("engagement response.ok must be boolean")
+        error = _exact(
+            payload["error"],
+            {"code", "message", "retryable"},
+            "engagement error",
+        )
+        if (
+            not isinstance(error["code"], str)
+            or not isinstance(error["message"], str)
+            or not isinstance(error["retryable"], bool)
+        ):
+            raise _mismatch("engagement error fields are invalid")
+        raise UoinkContractError(
+            error["code"],
+            error["message"],
+            status=status,
+            retryable=error["retryable"],
+        )
+    data = _exact(
+        payload["data"],
+        {"submitted", "accepted", "duplicates", "rejected"},
+        "engagement data",
+    )
+    for name in ("submitted", "accepted", "duplicates"):
+        value = data[name]
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            raise _mismatch(f"engagement data.{name} must be non-negative")
+    rejected = data["rejected"]
+    if not isinstance(rejected, list):
+        raise _mismatch("engagement data.rejected must be a list")
+    seen = set()
+    for item in rejected:
+        item = _exact(
+            item,
+            {"event_id", "code", "message", "retryable"},
+            "engagement rejection",
+        )
+        if (
+            not isinstance(item["event_id"], str)
+            or not isinstance(item["code"], str)
+            or not isinstance(item["message"], str)
+            or not isinstance(item["retryable"], bool)
+            or item["event_id"] in seen
+            or (
+                event_ids is not None
+                and item["event_id"] not in event_ids
+            )
+        ):
+            raise _mismatch("engagement rejection fields are invalid")
+        seen.add(item["event_id"])
+    if (
+        data["submitted"] != submitted
+        or data["submitted"]
+        != data["accepted"] + data["duplicates"] + len(rejected)
+    ):
+        raise _mismatch("engagement response accounting is inconsistent")
+    return data
 
 
 class UoinkClient:
@@ -409,9 +552,20 @@ class UoinkClient:
         self.timeout = max(0.05, min(float(timeout), 30.0))
 
     @classmethod
-    def from_env(cls, *, timeout: float = 5.0) -> "UoinkClient":
+    def from_env(
+        cls,
+        *,
+        timeout: float = 5.0,
+        check_permissions: bool = True,
+    ) -> "UoinkClient":
+        from writer.suite_peer import resolve_uoink_target
+
+        target = resolve_uoink_target(
+            environ=os.environ,
+            check_permissions=check_permissions,
+        )
         return cls(
-            os.environ.get(UOINK_URL_ENV, DEFAULT_BASE_URL),
+            target.base_url,
             os.environ.get(UOINK_TOKEN_ENV, ""),
             timeout=timeout,
         )
@@ -446,10 +600,32 @@ class UoinkClient:
             status = int(error.code)
             content_type = error.headers.get_content_type()
             raw = error.read(MAX_RESPONSE_BYTES + 1)
-        except (urllib.error.URLError, OSError, TimeoutError) as error:
+        except (TimeoutError, socket.timeout) as error:
+            raise UoinkUnavailable(
+                "Uoink timed out on the configured loopback address",
+                code="timeout",
+            ) from error
+        except urllib.error.URLError as error:
+            code = (
+                "timeout"
+                if isinstance(error.reason, (TimeoutError, socket.timeout))
+                else "unavailable"
+            )
+            raise UoinkUnavailable(
+                "Uoink is unavailable on the configured loopback address",
+                code=code,
+            ) from error
+        except OSError as error:
             raise UoinkUnavailable(
                 "Uoink is unavailable on the configured loopback address"
             ) from error
+        if status in {401, 403}:
+            raise UoinkContractError(
+                "authentication_failed",
+                "Uoink rejected the configured credential",
+                status=status,
+                retryable=False,
+            )
         if content_type != "application/json":
             raise UoinkUnavailable(
                 "Uoink returned a non-JSON response")
@@ -501,6 +677,91 @@ class UoinkClient:
             body=query.to_dict(),
         )
 
+    def ingest_engagement(self, events: list[dict[str, Any]]) -> dict:
+        """Deliver one exact, caller-issued engagement batch to Uoink."""
+        _validate_engagement_events(events)
+        body = {
+            "contract": "uoink.engagement.ingest",
+            "version": 1,
+            "events": events,
+        }
+        data = json.dumps(
+            body,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        request = urllib.request.Request(
+            self.base_url + "/api/engagement/v1/events",
+            data=data,
+            headers={
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+                "X-Uoink-Token": self.token,
+            },
+            method="POST",
+        )
+        status = 200
+        try:
+            with urllib.request.urlopen(
+                request,
+                timeout=self.timeout,
+            ) as response:
+                status = int(response.status)
+                content_type = response.headers.get_content_type()
+                raw = response.read(MAX_RESPONSE_BYTES + 1)
+        except urllib.error.HTTPError as error:
+            status = int(error.code)
+            content_type = error.headers.get_content_type()
+            raw = error.read(MAX_RESPONSE_BYTES + 1)
+        except (TimeoutError, socket.timeout) as error:
+            raise UoinkUnavailable(
+                "Uoink engagement delivery timed out",
+                code="timeout",
+            ) from error
+        except urllib.error.URLError as error:
+            code = (
+                "timeout"
+                if isinstance(error.reason, (TimeoutError, socket.timeout))
+                else "unavailable"
+            )
+            raise UoinkUnavailable(
+                "Uoink engagement delivery is unavailable",
+                code=code,
+            ) from error
+        except OSError as error:
+            raise UoinkUnavailable(
+                "Uoink engagement delivery is unavailable"
+            ) from error
+        if status in {401, 403}:
+            raise UoinkContractError(
+                "authentication_failed",
+                "Uoink rejected the configured credential",
+                status=status,
+                retryable=False,
+            )
+        if content_type != "application/json":
+            raise UoinkUnavailable(
+                "Uoink returned a non-JSON engagement response"
+            )
+        if len(raw) > MAX_RESPONSE_BYTES:
+            raise UoinkUnavailable(
+                "Uoink engagement response exceeded the safety limit"
+            )
+        try:
+            payload = json.loads(raw.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise UoinkUnavailable(
+                "Uoink returned invalid engagement JSON"
+            ) from error
+        return validate_engagement_response(
+            payload,
+            status=status,
+            submitted=len(events),
+            event_ids={
+                str(event["event_id"]) for event in events
+            },
+        )
+
     def attach_source(self, item_id: str) -> SourceSnapshot:
         detail = self.get(item_id)
         item = detail["item"]
@@ -525,7 +786,10 @@ class UoinkClient:
             (detail.get("content") or {}).get("text") or "")
         return SourceSnapshot(
             provider="uoink",
-            provider_ref=f"uoink://item/{item['id']}",
+            provider_ref=(
+                "uoink://item/"
+                + urllib.parse.quote(str(item["id"]), safe="")
+            ),
             title=title,
             creator=creator,
             source_url=source_url,

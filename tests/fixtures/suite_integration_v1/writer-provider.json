@@ -1,0 +1,248 @@
+{
+  "_fixture": {
+    "contracts": [
+      "ryan.suite.runtime-lease/1",
+      "ryan.suite.service/1",
+      "ryan.suite.health/1",
+      "writer.shot-list/1"
+    ],
+    "provider": "Writer",
+    "regenerate": "python tests/regenerate_suite_integration_v1_fixture.py",
+    "check": "python tests/regenerate_suite_integration_v1_fixture.py --check",
+    "data": "synthetic",
+    "network": "none"
+  },
+  "valid": {
+    "runtime_lease": {
+      "contract": "ryan.suite.runtime-lease",
+      "version": 1,
+      "service_id": "writer",
+      "service_version": "0.1.0.dev0",
+      "api_version": 1,
+      "base_url": "http://127.0.0.1:5181",
+      "health_url": "http://127.0.0.1:5181/api/suite/v1/health",
+      "manifest_url": "http://127.0.0.1:5181/.well-known/suite-service.json",
+      "capabilities": [
+        "writer.api/1",
+        "writer.shot-list/1"
+      ],
+      "ui": {
+        "home": "/",
+        "routes": {
+          "editor": "/"
+        }
+      },
+      "pid": 1234,
+      "started_at": "2026-07-19T12:00:00Z"
+    },
+    "service_manifest": {
+      "ok": true,
+      "contract": "ryan.suite.service",
+      "version": 1,
+      "service": {
+        "id": "writer",
+        "name": "Writer",
+        "service_version": "0.1.0.dev0",
+        "api_version": 1,
+        "resident": true,
+        "default_port": 5181,
+        "health": {
+          "contract": "ryan.suite.health",
+          "version": 1,
+          "href": "/api/suite/v1/health"
+        },
+        "capabilities": [
+          "writer.api/1",
+          "writer.shot-list/1"
+        ],
+        "ui": {
+          "home": "/",
+          "routes": {
+            "editor": "/"
+          }
+        },
+        "mcp": {
+          "name": "writer",
+          "transport": "stdio"
+        }
+      }
+    },
+    "health": {
+      "ok": true,
+      "contract": "ryan.suite.health",
+      "version": 1,
+      "service_id": "writer",
+      "service_version": "0.1.0.dev0",
+      "state": "ready",
+      "checks": [
+        {
+          "id": "core",
+          "required": true,
+          "status": "ready"
+        },
+        {
+          "id": "database",
+          "required": true,
+          "status": "ready"
+        }
+      ]
+    },
+    "shot_list": {
+      "contract": "writer.shot-list",
+      "version": 1,
+      "document": {
+        "title": "Fixture shot list",
+        "hook": "One local handoff kept the source credit.",
+        "beats": [
+          {
+            "label": "proof",
+            "content": "Show the verified local artifact.",
+            "timecode": "0:00-0:08"
+          }
+        ],
+        "script": "The complete fixture script.",
+        "cta": "Open the saved shot list.",
+        "shots": [
+          {
+            "scene": 1,
+            "label": "proof",
+            "cues": [
+              "screen recording",
+              "close-up hands"
+            ],
+            "notes": ""
+          }
+        ],
+        "credits": [
+          "Source: Fixture short by Fixture Creator -- https://example.test/short/123"
+        ],
+        "generated_at": "2026-07-19T12:00:00Z",
+        "source_script_id": 1,
+        "document_type": "writer.shot-list",
+        "schema_version": 1
+      },
+      "markdown": "---\ndocument_type: writer.shot-list\nschema_version: 1\ngenerated_at: 2026-07-19T12:00:00Z\nsource_script_id: 1\n---\n\n# Fixture shot list\n\n## Hook\n\nOne local handoff kept the source credit.\n\n## Beats\n\n- **proof** (0:00-0:08): Show the verified local artifact.\n\n## Script\n\nThe complete fixture script.\n\n## CTA\n\nOpen the saved shot list.\n\n## Shots\n\n1. **proof**: screen recording, close-up hands.\n\n## Credits\n\n- Source: Fixture short by Fixture Creator -- https://example.test/short/123\n"
+    },
+    "engagement": {
+      "receipt": {
+        "state": "spooled",
+        "submitted": 1,
+        "accepted": 0,
+        "duplicates": 0,
+        "spooled": 1,
+        "rejected": 0
+      },
+      "outbox": [
+        {
+          "event": {
+            "event_id": "writer-03bc5a6a-5aad-5030-9106-8de6bbcae68b",
+            "item_ref": "uoink://item/short-123",
+            "event_type": "cite",
+            "source_product": "writer",
+            "occurred_at": "2026-07-19T12:00:00Z"
+          },
+          "entity_kind": "piece",
+          "entity_id": 1,
+          "entity_version": 1,
+          "attempts": 0,
+          "last_error_code": ""
+        }
+      ]
+    }
+  },
+  "negative": {
+    "runtime_lease": {
+      "unknown_key": {
+        "operation": "set",
+        "path": "surprise",
+        "value": true
+      },
+      "non_loopback_url": {
+        "operation": "set",
+        "path": "base_url",
+        "value": "http://192.0.2.10:5181"
+      },
+      "token_field": {
+        "operation": "set",
+        "path": "token",
+        "value": "must-not-cross"
+      },
+      "path_field": {
+        "operation": "set",
+        "path": "database_path",
+        "value": "C:\\private\\writer.db"
+      },
+      "command_field": {
+        "operation": "set",
+        "path": "command",
+        "value": [
+          "python",
+          "-m",
+          "writer.cli"
+        ]
+      }
+    },
+    "service_manifest": {
+      "wrong_version": {
+        "operation": "set",
+        "path": "version",
+        "value": 2
+      },
+      "token_field": {
+        "operation": "set",
+        "path": "service.token",
+        "value": "must-not-cross"
+      }
+    },
+    "health": {
+      "inconsistent_ok": {
+        "operation": "set",
+        "path": "ok",
+        "value": false
+      },
+      "path_field": {
+        "operation": "set",
+        "path": "checks.0.path",
+        "value": "C:\\private"
+      }
+    },
+    "shot_list": {
+      "wrong_front_matter": {
+        "replace": [
+          "document_type: writer.shot-list",
+          "document_type: writer.shot-list-v2"
+        ]
+      },
+      "duplicate_front_matter": {
+        "insert_after": [
+          "document_type: writer.shot-list",
+          "document_type: writer.shot-list"
+        ]
+      },
+      "wrong_heading_order": {
+        "swap": [
+          "## Beats",
+          "## Script"
+        ]
+      },
+      "invalid_id": {
+        "replace": [
+          "source_script_id: 1",
+          "source_script_id: zero"
+        ]
+      },
+      "invalid_time": {
+        "replace": [
+          "generated_at: 2026-07-19T12:00:00Z",
+          "generated_at: yesterday"
+        ]
+      },
+      "oversized": {
+        "append_bytes": 1048577
+      },
+      "non_utf8": {
+        "bytes_hex": "fffe00"
+      }
+    }
+  }
+}

@@ -11,8 +11,10 @@ from importlib.resources import files
 from pathlib import Path
 from typing import Any
 
+from writer import __version__
 from writer.mcp_server import WriterTools
 from writer.storage import WriterStore
+from writer import suite_service
 from writer.uoink_client import UoinkClient
 
 DEFAULT_HOST = "127.0.0.1"
@@ -186,6 +188,21 @@ class WriterHandler(BaseHTTPRequestHandler):
                     "standalone": True,
                 },
             })
+            return
+        if path == suite_service.MANIFEST_PATH:
+            self._json(
+                200,
+                suite_service.service_manifest(__version__),
+            )
+            return
+        if path == suite_service.HEALTH_PATH:
+            self._json(
+                200,
+                suite_service.health_payload(
+                    __version__,
+                    database_ok=self.server.store.database_ready(),
+                ),
+            )
             return
         if not path.startswith("/api/writer/v1") or not self._require_auth():
             if not path.startswith("/api/writer/v1"):

@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import importlib.util
 import json
-import os
 import sqlite3
 from dataclasses import asdict, dataclass
 from importlib.resources import files
@@ -18,7 +17,7 @@ from typing import Callable
 from writer import __version__
 from writer.mcp_server import TOOL_NAMES
 from writer.storage import WriterStore
-from writer.uoink_client import UOINK_TOKEN_ENV, UoinkClient
+from writer.suite_peer import probe_uoink
 
 
 @dataclass(frozen=True)
@@ -29,6 +28,7 @@ class Check:
     status: str
     detail: str
     fix: str = ""
+    result: dict | None = None
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -70,6 +70,8 @@ def check_packaged_data() -> Check:
         required = {
             "database migration": root.joinpath(
                 "migrations", "0001_initial.sql"),
+            "engagement migration": root.joinpath(
+                "migrations", "0002_engagement_outbox.sql"),
             "Voice DNA": root.joinpath(
                 "_data", "voice_dna", "VOICE-DNA.md"),
             "editor": root.joinpath("_data", "ui", "index.html"),
@@ -118,24 +120,34 @@ def check_mcp() -> Check:
 
 
 def check_uoink() -> Check:
-    if not str(os.environ.get(UOINK_TOKEN_ENV) or "").strip():
+    peer = probe_uoink(timeout=0.5)
+    state = str(peer["state"])
+    if state == "available":
         return Check(
-            "uoink", False, False, "not_configured",
-            "optional corpus sources are disabled; blank-page and pasted-text "
-            "work remains available",
+            "uoink", False, True, state,
+            "optional peer passed suite discovery, health, and corpus.read v1",
+            result=peer,
         )
-    try:
-        UoinkClient.from_env(timeout=1.0).facets()
-    except (OSError, RuntimeError, ValueError) as exc:
+    if state == "absent":
         return Check(
-            "uoink", False, False, "unavailable",
-            f"configured loopback peer did not pass corpus.read v1: {exc}",
-            "Start Uoink, verify WRITER_UOINK_URL and "
-            "WRITER_UOINK_TOKEN, then rerun `writer doctor`.",
+            "uoink", False, False, state,
+            "Uoink is not running; blank-page and pasted-text work remains "
+            "available",
+            result=peer,
         )
+    if state == "unconfigured":
+        return Check(
+            "uoink", False, False, state,
+            "Uoink is available but Writer has no configured credential",
+            "Set WRITER_UOINK_TOKEN, then rerun `writer doctor`.",
+            result=peer,
+        )
+    error = peer["error"]
     return Check(
-        "uoink", False, True, "available",
-        "configured loopback peer passed corpus.read v1",
+        "uoink", False, False, state,
+        f"{error['code']}: {error['message']}",
+        "Check Writer's Uoink URL and token, then rerun `writer doctor`.",
+        result=peer,
     )
 
 

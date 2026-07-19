@@ -7,6 +7,8 @@ display snapshot, never a foreign database row or filesystem path.
 from __future__ import annotations
 
 import json
+import re
+import urllib.parse
 from dataclasses import asdict, dataclass, field
 from typing import Any, ClassVar
 
@@ -76,10 +78,30 @@ class SourceSnapshot(JsonContract):
             raise SchemaError(
                 "source.provider must be one of "
                 + ", ".join(SOURCE_PROVIDERS))
-        if self.provider == "uoink" and not self.provider_ref.startswith(
-                "uoink://item/"):
-            raise SchemaError(
-                "uoink source.provider_ref must start with uoink://item/")
+        if self.provider == "uoink":
+            parsed = urllib.parse.urlparse(self.provider_ref)
+            encoded_id = parsed.path[1:] if parsed.path.startswith("/") else ""
+            item_id = urllib.parse.unquote(encoded_id)
+            invalid_percent = "%" in re.sub(
+                r"%[0-9A-Fa-f]{2}",
+                "",
+                encoded_id,
+            )
+            if (
+                parsed.scheme != "uoink"
+                or parsed.netloc != "item"
+                or not encoded_id
+                or invalid_percent
+                or "/" in encoded_id
+                or "/" in item_id
+                or "\\" in item_id
+                or parsed.params
+                or parsed.query
+                or parsed.fragment
+            ):
+                raise SchemaError(
+                    "uoink source.provider_ref must identify one "
+                    "uoink://item/<id>")
         if self.credit_required and not self.credit_line.strip():
             raise SchemaError(
                 "external source requires a display-safe credit_line")

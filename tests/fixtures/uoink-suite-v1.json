@@ -1,0 +1,208 @@
+{
+  "_upstream": {
+    "repository": "ryanbiddy/uoink",
+    "commit": "3a715c8784c039c7de09e418699cf7d22305e259",
+    "fixture": "tests/fixtures/suite_integration_v1/uoink-provider.json",
+    "fixture_sha256": "5701EDFB3C90EC27DB0EB87477266D81B70D22FCE30C9AFD691DD440C865CA84"
+  },
+  "valid": {
+    "runtime_lease": {
+      "contract": "ryan.suite.runtime-lease",
+      "version": 1,
+      "service_id": "uoink",
+      "service_version": "3.6.0",
+      "api_version": 1,
+      "base_url": "http://127.0.0.1:5179",
+      "health_url": "http://127.0.0.1:5179/api/suite/v1/health",
+      "manifest_url": "http://127.0.0.1:5179/.well-known/suite-service.json",
+      "capabilities": [
+        "uoink.corpus.read/1",
+        "uoink.engagement.ingest/1",
+        "uoink.media.handoff/1"
+      ],
+      "ui": {
+        "home": "/dashboard",
+        "routes": {
+          "library": "/dashboard#library"
+        }
+      },
+      "pid": 1234,
+      "started_at": "2026-07-19T12:00:00Z"
+    },
+    "service_manifest": {
+      "ok": true,
+      "contract": "ryan.suite.service",
+      "version": 1,
+      "service": {
+        "id": "uoink",
+        "name": "Uoink",
+        "service_version": "3.6.0",
+        "api_version": 1,
+        "resident": true,
+        "default_port": 5179,
+        "health": {
+          "contract": "ryan.suite.health",
+          "version": 1,
+          "href": "/api/suite/v1/health"
+        },
+        "capabilities": [
+          "uoink.corpus.read/1",
+          "uoink.engagement.ingest/1",
+          "uoink.media.handoff/1"
+        ],
+        "ui": {
+          "home": "/dashboard",
+          "routes": {
+            "library": "/dashboard#library"
+          }
+        },
+        "mcp": {
+          "name": "uoink",
+          "transport": "stdio"
+        }
+      }
+    },
+    "health": {
+      "ready": {
+        "ok": true,
+        "contract": "ryan.suite.health",
+        "version": 1,
+        "service_id": "uoink",
+        "service_version": "3.6.0",
+        "state": "ready",
+        "checks": [
+          {
+            "id": "core",
+            "required": true,
+            "status": "ready"
+          },
+          {
+            "id": "index",
+            "required": true,
+            "status": "ready"
+          },
+          {
+            "id": "corpus_paths",
+            "required": true,
+            "status": "ready"
+          }
+        ]
+      }
+    },
+    "engagement": {
+      "request": {
+        "contract": "uoink.engagement.ingest",
+        "version": 1,
+        "events": [
+          {
+            "event_id": "writer-8f1fba1c-96ac-4b69-92f5-932fc2176ed8",
+            "item_ref": "uoink://item/short-123",
+            "event_type": "cite",
+            "source_product": "writer",
+            "occurred_at": "2026-07-19T12:00:00Z"
+          }
+        ]
+      },
+      "accepted": {
+        "ok": true,
+        "contract": "uoink.engagement.ingest",
+        "version": 1,
+        "data": {
+          "submitted": 1,
+          "accepted": 1,
+          "duplicates": 0,
+          "rejected": []
+        }
+      }
+    }
+  },
+  "negative": {
+    "runtime_lease": {
+      "unknown_key": {
+        "operation": "set",
+        "path": "surprise",
+        "value": true
+      },
+      "non_loopback_url": {
+        "operation": "set",
+        "path": "base_url",
+        "value": "http://192.0.2.10:5179"
+      },
+      "token_field": {
+        "operation": "set",
+        "path": "token",
+        "value": "must-not-cross"
+      },
+      "path_field": {
+        "operation": "set",
+        "path": "corpus_path",
+        "value": "C:\\private"
+      },
+      "command_field": {
+        "operation": "set",
+        "path": "command",
+        "value": [
+          "python",
+          "server.py"
+        ]
+      },
+      "wrong_identity": {
+        "operation": "set",
+        "path": "service_id",
+        "value": "writer"
+      },
+      "dead_pid": {
+        "operation": "set",
+        "path": "pid",
+        "value": 2147483647
+      }
+    },
+    "service_manifest": {
+      "wrong_service": {
+        "operation": "set",
+        "path": "service.id",
+        "value": "writer"
+      },
+      "wrong_version": {
+        "operation": "set",
+        "path": "version",
+        "value": 2
+      },
+      "unknown_key": {
+        "operation": "set",
+        "path": "service.command",
+        "value": [
+          "python",
+          "server.py"
+        ]
+      },
+      "token_field": {
+        "operation": "set",
+        "path": "service.token",
+        "value": "must-not-cross"
+      }
+    },
+    "health": {
+      "wrong_identity": {
+        "operation": "set",
+        "path": "service_id",
+        "value": "writer"
+      },
+      "inconsistent_ok": {
+        "operation": "set",
+        "path": "ok",
+        "value": false
+      },
+      "path_field": {
+        "operation": "set",
+        "path": "checks.0.path",
+        "value": "C:\\private"
+      },
+      "unknown_state": {
+        "operation": "set",
+        "path": "state",
+        "value": "starting"
+      }
+    }
+  }
+}
