@@ -664,3 +664,12 @@ class WriterStore:
             critique for row in rows
             if (critique := self._critique_row(row)) is not None
         ]
+
+    def get_critique(
+            self, critique_id: int) -> CritiqueContract | None:
+        with self._lock:
+            row = self.connection.execute(
+                "SELECT * FROM critiques WHERE id=?",
+                (int(critique_id),),
+            ).fetchone()
+        return self._critique_row(row)

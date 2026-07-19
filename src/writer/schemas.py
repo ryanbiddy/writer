@@ -16,6 +16,13 @@ SOURCE_PROVIDERS = ("original", "paste", "file", "url", "uoink")
 UOINK_CONTRACT = "uoink.corpus.read"
 UOINK_CONTRACT_VERSION = 1
 SHOT_LIST_DOCUMENT_TYPE = "writer.shot-list"
+PROMPT_OPERATIONS = (
+    "prepare_draft",
+    "revise_piece",
+    "prepare_script",
+    "revise_script",
+    "critique_script",
+)
 
 
 class SchemaError(ValueError):
@@ -227,6 +234,60 @@ class AssemblyQuery(JsonContract):
 
 
 @dataclass
+class PromptContract(JsonContract):
+    """A model-neutral handoff from Writer to the calling AI.
+
+    Writer prepares and validates context but does not choose or hide a
+    provider. An MCP client can use the prompt directly. A standalone client
+    can show it, use a configured provider, or keep working manually.
+    """
+
+    operation: str
+    system_prompt: str
+    instruction: str
+    context: dict[str, Any] = field(default_factory=dict)
+    sources: list[SourceSnapshot] = field(default_factory=list)
+    voice_sample_ids: list[int] = field(default_factory=list)
+    dependency_status: dict[str, str] = field(default_factory=dict)
+    schema_version: int = SCHEMA_VERSION
+
+    def validate(self) -> "PromptContract":
+        _version(self.schema_version, "prompt")
+        if self.operation not in PROMPT_OPERATIONS:
+            raise SchemaError(
+                "prompt.operation must be one of "
+                + ", ".join(PROMPT_OPERATIONS))
+        if not self.system_prompt.strip():
+            raise SchemaError("prompt.system_prompt is required")
+        if not self.instruction.strip():
+            raise SchemaError("prompt.instruction is required")
+        if not isinstance(self.context, dict):
+            raise SchemaError("prompt.context must be an object")
+        for source in self.sources:
+            source.validate()
+        if any(
+                isinstance(value, bool) or not isinstance(value, int)
+                for value in self.voice_sample_ids):
+            raise SchemaError(
+                "prompt.voice_sample_ids must be a list of integers")
+        if not isinstance(self.dependency_status, dict) or any(
+                not isinstance(key, str) or not isinstance(value, str)
+                for key, value in self.dependency_status.items()):
+            raise SchemaError(
+                "prompt.dependency_status must contain string values")
+        return self
+
+    @classmethod
+    def from_dict(cls, value: dict[str, Any]) -> "PromptContract":
+        data = dict(value)
+        data["sources"] = [
+            SourceSnapshot.from_dict(item)
+            for item in data.get("sources") or []
+        ]
+        return cls(**data).validate()
+
+
+@dataclass
 class ScriptContract(JsonContract):
     hook: str
     format: str = ""
@@ -382,4 +443,3 @@ class VoiceSampleContract(JsonContract):
     @classmethod
     def from_dict(cls, value: dict[str, Any]) -> "VoiceSampleContract":
         return cls(**value).validate()
-
