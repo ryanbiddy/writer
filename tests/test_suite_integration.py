@@ -362,7 +362,9 @@ def test_runtime_lease_uses_actual_port_and_owned_cleanup(tmp_path):
     ) is True
 
 
-def test_cli_writes_lease_after_bind_and_removes_it(monkeypatch, tmp_path):
+def test_cli_writes_lease_after_bind_and_removes_it(
+    monkeypatch, tmp_path, capsys
+):
     calls = []
 
     class FakeServer:
@@ -375,7 +377,10 @@ def test_cli_writes_lease_after_bind_and_removes_it(monkeypatch, tmp_path):
             calls.append("close")
 
     monkeypatch.setenv("WRITER_UOINK_TOKEN", "stale-token")
+    monkeypatch.delenv("WRITER_TOKEN", raising=False)
     monkeypatch.setattr(cli, "ensure_token", lambda: "writer-token")
+    credential_path = tmp_path / "writer.token"
+    monkeypatch.setattr(cli, "token_path", lambda: credential_path)
     monkeypatch.setattr(
         cli.UoinkClient,
         "from_env",
@@ -392,6 +397,11 @@ def test_cli_writes_lease_after_bind_and_removes_it(monkeypatch, tmp_path):
     assert cli.main(["serve", "--port", "0"]) == 0
     assert calls == ["serve", "close"]
     assert not (tmp_path / "services.d" / "writer.json").exists()
+    output = capsys.readouterr().out
+    assert "http://127.0.0.1:61234/" in output
+    assert str(credential_path) in output
+    assert "writer-token" not in output
+    assert "#token=" not in output
 
 
 def test_uoink_fixture_is_pinned_to_landed_provider():

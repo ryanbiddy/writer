@@ -16,8 +16,10 @@ writer serve
 ```
 
 `writer serve` starts the editor and authenticated HTTP API on loopback port
-5181. It prints a local URL whose fragment carries the Writer credential into
-that browser tab. The fragment is removed from the address bar after load.
+5181. It prints the local editor URL and the credential source (the local
+credential file, or `WRITER_TOKEN` when explicitly configured), but never
+prints the credential or places it in a URL. Open the editor, copy the value
+from that source, and paste it into the editor's Credential field.
 
 Connect an AI directly to Writer's MCP server:
 
