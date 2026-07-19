@@ -30,20 +30,8 @@ def main(argv: list[str] | None = None) -> int:
         from writer import mcp_server
         return mcp_server.run(args[1:])
     if args[0] == "doctor":
-        from writer.mcp_server import WriterTools
-        from writer.storage import WriterStore
-
-        store = WriterStore.open()
-        try:
-            status = WriterTools(store).writer_status()
-        finally:
-            store.close()
-        print("Writer doctor")
-        print(f"  database: {status['database']}")
-        print(f"  schema: v{status['schema_version']}")
-        print(f"  Uoink: {status['uoink']} (optional)")
-        print(f"  MCP tools: 17")
-        return 0
+        from writer import doctor
+        return doctor.run(args[1:])
     if args[0] == "serve":
         parser = argparse.ArgumentParser(prog="writer serve")
         parser.add_argument("--host", default=DEFAULT_HOST)
