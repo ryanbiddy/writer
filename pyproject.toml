@@ -22,8 +22,11 @@ writer = "writer.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-writer = ["migrations/*.sql", "_data/voice_dna/*.md"]
+writer = [
+    "migrations/*.sql",
+    "_data/voice_dna/*.md",
+    "_data/ui/*.html",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-

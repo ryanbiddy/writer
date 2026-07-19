@@ -13,6 +13,13 @@ from writer.schemas import (
 )
 from writer.storage import WriterStore
 
+COMPOSITION_LIMITS = {
+    "tweet": 280,
+    "thread": 280,
+    "blog": None,
+    "newsletter": None,
+}
+
 
 def _source_context(sources: list[SourceSnapshot]) -> list[dict[str, Any]]:
     return [
@@ -25,6 +32,61 @@ def _source_context(sources: list[SourceSnapshot]) -> list[dict[str, Any]]:
         }
         for source in sources
     ]
+
+
+def validate_composition(
+        *, kind: str, blocks: list[str],
+        credit_lines: list[str] | None = None,
+        attribution_enabled: bool = True) -> dict[str, Any]:
+    """Calculate platform-sized blocks without sending or opening anything."""
+    if kind not in COMPOSITION_LIMITS:
+        raise ValueError(
+            "kind must be tweet, thread, blog, or newsletter")
+    if not isinstance(blocks, list) or not blocks or any(
+            not isinstance(block, str) for block in blocks):
+        raise ValueError("blocks must be a non-empty list of strings")
+    credits = [
+        str(line).strip() for line in (credit_lines or [])
+        if str(line).strip()
+    ]
+    footer = "\n".join(dict.fromkeys(credits)) \
+        if attribution_enabled else ""
+    limit = COMPOSITION_LIMITS[kind]
+    rows = []
+    for index, block in enumerate(blocks):
+        with_footer = block
+        if footer and index == len(blocks) - 1:
+            with_footer = (
+                block.rstrip() + "\n\n" + footer
+                if block.strip() else footer
+            )
+        count = len(block)
+        total = len(with_footer)
+        rows.append({
+            "index": index,
+            "char_count": count,
+            "char_count_with_footer": total,
+            "remaining": (
+                limit - count if limit is not None else None),
+            "remaining_with_footer": (
+                limit - total if limit is not None else None),
+            "over_limit": (
+                count > limit if limit is not None else False),
+            "over_limit_with_footer": (
+                total > limit if limit is not None else False),
+        })
+    return {
+        "kind": kind,
+        "limit": limit,
+        "attribution_enabled": bool(attribution_enabled),
+        "footer_text": footer,
+        "total_blocks": len(blocks),
+        "blocks": rows,
+        "footer_target_index": (
+            len(blocks) - 1 if footer else None),
+        "over_limit_any": any(
+            row["over_limit_with_footer"] for row in rows),
+    }
 
 
 class WritingService:

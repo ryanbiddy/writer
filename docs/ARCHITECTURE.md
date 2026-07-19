@@ -28,9 +28,9 @@ per-install token supplied by the user or process environment. Writer accepts
 only the `uoink.corpus.read` v1 envelopes for search, get, facets, taste, and
 assemble.
 
-Writer's future loopback server uses port 5181 and a Writer-owned token. AI
-clients register Writer's stdio MCP server directly. There is no suite MCP
-proxy and no shared token.
+Writer's loopback server uses port 5181 and a Writer-owned token. AI clients
+register Writer's stdio MCP server directly. There is no suite MCP proxy and
+no shared token.
 
 ## Persistence
 
@@ -52,5 +52,14 @@ stay untouched for the compatibility window and are never read by Writer.
 5. HTTP, MCP, and standalone editor.
 6. Uoink compatibility stays green until Writer passes its own full gate.
 
-Every numbered stage is a rollback commit.
+Every numbered stage is a rollback commit:
 
+| Stage | Commit | Gate |
+|---|---|---|
+| Scaffold | `e599b0a` | schemas, migration, 8 tests |
+| Uoink contract client | `db6e513` | strict v1 fixture, 14 tests |
+| Persistence and Voice DNA | `b7b86dc` | Writer-only SQLite, 26 tests |
+| Prose, scripts, and critique | `86b2fe8` | standalone domains, 37 tests |
+
+The HTTP, MCP, editor, compatibility, and final dual-repository gates are
+recorded when their commits land.

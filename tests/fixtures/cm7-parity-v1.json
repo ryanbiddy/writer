@@ -1,0 +1,115 @@
+{
+  "_upstream": {
+    "repository": "ryanbiddy/uoink",
+    "commit": "1895899d3eb51a70d6ec0f75f03f5bdef43c5ee6",
+    "characterization_commit": "5d9564e2",
+    "fixtures": {
+      "writing.json": {
+        "sha256": "f6c1e6f6382aa9bccd0d43c6b419d4b2a3d7b21ed2600e51dc36529e91ed089c",
+        "interactions": 10
+      },
+      "scripts.json": {
+        "sha256": "49eba8561898d636b347076b484607045d35cee0f9c997e0b694de534b867d76",
+        "interactions": 7
+      },
+      "workspace-assembly.json": {
+        "sha256": "5351b5a9b4eef255845d09f62c5ba59b287e300d28bfcd40987460ffc03def88",
+        "interactions": 6
+      }
+    }
+  },
+  "source": {
+    "provider": "uoink",
+    "provider_ref": "uoink://item/video-over",
+    "title": "The concrete opener",
+    "creator": "Synthetic Creator",
+    "source_url": "",
+    "credit_line": "via Synthetic Creator",
+    "excerpt": "Which step saves the most time?",
+    "attached_at": "2030-01-02T03:04:01Z",
+    "credit_required": true,
+    "schema_version": 1
+  },
+  "voice_sample": {
+    "name": "Fixture voice",
+    "source_type": "text",
+    "raw_text": "Short sentences. Concrete nouns. Show the mechanism.",
+    "source_url": "",
+    "active": true,
+    "default": false,
+    "schema_version": 1
+  },
+  "writing": {
+    "kind": "tweet",
+    "body": "One repeated task cost an hour. Three steps fixed it.\n\nvia Synthetic Creator",
+    "angle": "saved time",
+    "target_length": 180,
+    "draft_body": "A synthetic work in progress.",
+    "revision_body": "One repeated task cost an hour. The first step removed half of it.\n\nvia Synthetic Creator",
+    "invalid_body": "This omits the required credit.",
+    "composition_blocks": [
+      "One repeated task cost an hour."
+    ]
+  },
+  "script": {
+    "format": "talking_head",
+    "target_length_sec": 45,
+    "hook": "The slow part was not the model.",
+    "beats": [
+      {
+        "label": "setup",
+        "content": "Name the repeated task."
+      },
+      {
+        "label": "proof",
+        "content": "Show the saved hour."
+      }
+    ],
+    "body": "A short synthetic script.",
+    "cta": "Try the smallest repeatable step.",
+    "revision": {
+      "target_length_sec": 40,
+      "hook": "One repeated task cost an hour.",
+      "beats": [
+        {
+          "label": "setup",
+          "content": "Show the task immediately."
+        },
+        {
+          "label": "proof",
+          "content": "Show the saved hour."
+        }
+      ],
+      "body": "A tighter synthetic script.",
+      "cta": "Automate one repeated step."
+    },
+    "critique_findings": {
+      "pacing": "Cut the setup."
+    }
+  },
+  "assembly": {
+    "query": {
+      "format": "talking_head",
+      "topic": "AI",
+      "hook_target": "curiosity_gap",
+      "your_channel": null,
+      "n_examples": 2
+    },
+    "selected_ids": [
+      "video-over",
+      "video-average"
+    ],
+    "audience_questions": [
+      {
+        "video_id": "video-over",
+        "question": "Which step saves the most time?",
+        "likes": 12
+      },
+      {
+        "video_id": "video-average",
+        "question": "Can this run locally?",
+        "likes": 8
+      }
+    ]
+  }
+}
