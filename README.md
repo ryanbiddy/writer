@@ -61,7 +61,14 @@ draft reopens without Uoink.
 python -m compileall -q src tests
 python -m pytest -q
 writer doctor
+writer doctor --json
+python packaging/clean_host_check.py --report clean-host-local.json
 ```
+
+The clean-host gate builds a wheel, installs `ryan-writer[mcp]` into a bare
+temporary venv, leaves the repository off the tested import path, verifies the
+human and JSON doctor surfaces, and drives all 17 MCP tools through a real
+stdio handshake. CI repeats that gate on Ubuntu, Windows, and macOS.
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for contracts, ports, and
 rollback boundaries.
