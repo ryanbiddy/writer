@@ -11,6 +11,7 @@ import os
 import sqlite3
 import sys
 import threading
+import uuid
 from dataclasses import replace
 from datetime import datetime, timezone
 from importlib.resources import files
@@ -35,6 +36,10 @@ DATA_DIR_ENV = "WRITER_DATA_DIR"
 
 def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def _utc_z() -> str:
+    return now_iso().replace("+00:00", "Z")
 
 
 def default_data_dir() -> Path:
@@ -149,6 +154,203 @@ class WriterStore:
                 )
             self.connection.commit()
 
+    def database_ready(self) -> bool:
+        """Bounded database readiness for the public suite health surface."""
+        try:
+            with self._lock:
+                quick = self.connection.execute(
+                    "PRAGMA quick_check"
+                ).fetchone()
+                version = self.connection.execute(
+                    "SELECT COALESCE(MAX(version), 0) "
+                    "FROM schema_migrations"
+                ).fetchone()
+            return (
+                quick is not None
+                and str(quick[0]) == "ok"
+                and version is not None
+                and int(version[0]) >= 2
+            )
+        except sqlite3.Error:
+            return False
+
+    @staticmethod
+    def _engagement_event_id(
+        entity_kind: str,
+        entity_id: int,
+        entity_version: int,
+        item_ref: str,
+    ) -> str:
+        identity = (
+            f"writer:{entity_kind}:{entity_id}:"
+            f"v{entity_version}:{item_ref}"
+        )
+        return "writer-" + str(uuid.uuid5(uuid.NAMESPACE_URL, identity))
+
+    def _enqueue_cite_events(
+        self,
+        *,
+        entity_kind: str,
+        entity_id: int,
+        entity_version: int,
+        sources: list[SourceSnapshot],
+    ) -> None:
+        """Add deterministic cite events inside the caller's save transaction."""
+        timestamp = _utc_z()
+        for source in sources:
+            if source.provider != "uoink":
+                continue
+            event_id = self._engagement_event_id(
+                entity_kind,
+                entity_id,
+                entity_version,
+                source.provider_ref,
+            )
+            event = {
+                "event_id": event_id,
+                "item_ref": source.provider_ref,
+                "event_type": "cite",
+                "source_product": "writer",
+                "occurred_at": timestamp,
+            }
+            self.connection.execute(
+                "INSERT OR IGNORE INTO engagement_outbox "
+                "(event_id, entity_kind, entity_id, entity_version, "
+                "item_ref, event_json, attempts, last_error_code, "
+                "created_at, updated_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, 0, '', ?, ?)",
+                (
+                    event_id,
+                    entity_kind,
+                    entity_id,
+                    entity_version,
+                    source.provider_ref,
+                    _json(event),
+                    timestamp,
+                    timestamp,
+                ),
+            )
+
+    def pending_engagement(
+        self,
+        *,
+        entity_kind: str | None = None,
+        entity_id: int | None = None,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        clauses = []
+        values: list[Any] = []
+        if entity_kind is not None:
+            clauses.append("entity_kind=?")
+            values.append(entity_kind)
+        if entity_id is not None:
+            clauses.append("entity_id=?")
+            values.append(int(entity_id))
+        where = " WHERE " + " AND ".join(clauses) if clauses else ""
+        values.append(max(1, min(int(limit), 100)))
+        with self._lock:
+            rows = self.connection.execute(
+                "SELECT * FROM engagement_outbox"
+                + where
+                + " ORDER BY created_at, event_id LIMIT ?",
+                values,
+            ).fetchall()
+        return [
+            {
+                "event": json.loads(str(row["event_json"])),
+                "entity_kind": str(row["entity_kind"]),
+                "entity_id": int(row["entity_id"]),
+                "entity_version": int(row["entity_version"]),
+                "attempts": int(row["attempts"]),
+                "last_error_code": str(row["last_error_code"] or ""),
+            }
+            for row in rows
+        ]
+
+    def complete_engagement(self, event_ids: list[str]) -> None:
+        if not event_ids:
+            return
+        placeholders = ",".join("?" for _ in event_ids)
+        with self._lock:
+            self.connection.execute(
+                f"DELETE FROM engagement_outbox "
+                f"WHERE event_id IN ({placeholders})",
+                event_ids,
+            )
+            self.connection.commit()
+
+    def mark_engagement_attempt(
+        self,
+        event_ids: list[str],
+        error_code: str,
+    ) -> None:
+        if not event_ids:
+            return
+        placeholders = ",".join("?" for _ in event_ids)
+        with self._lock:
+            self.connection.execute(
+                f"UPDATE engagement_outbox "
+                f"SET attempts=attempts+1, last_error_code=?, updated_at=? "
+                f"WHERE event_id IN ({placeholders})",
+                [str(error_code), _utc_z(), *event_ids],
+            )
+            self.connection.commit()
+
+    def record_engagement_rejections(
+        self,
+        rejections: list[dict[str, Any]],
+    ) -> None:
+        if not rejections:
+            return
+        timestamp = _utc_z()
+        with self._lock:
+            try:
+                for rejection in rejections:
+                    event_id = str(rejection["event_id"])
+                    row = self.connection.execute(
+                        "SELECT * FROM engagement_outbox WHERE event_id=?",
+                        (event_id,),
+                    ).fetchone()
+                    if row is None:
+                        continue
+                    self.connection.execute(
+                        "INSERT OR REPLACE INTO engagement_rejections "
+                        "(event_id, entity_kind, entity_id, entity_version, "
+                        "item_ref, code, message, rejected_at) "
+                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                        (
+                            event_id,
+                            str(row["entity_kind"]),
+                            int(row["entity_id"]),
+                            int(row["entity_version"]),
+                            str(row["item_ref"]),
+                            str(rejection["code"]),
+                            str(rejection["message"]),
+                            timestamp,
+                        ),
+                    )
+                    self.connection.execute(
+                        "DELETE FROM engagement_outbox WHERE event_id=?",
+                        (event_id,),
+                    )
+                self.connection.commit()
+            except Exception:
+                self.connection.rollback()
+                raise
+
+    def engagement_status(self) -> dict[str, int]:
+        with self._lock:
+            pending = self.connection.execute(
+                "SELECT COUNT(*) FROM engagement_outbox"
+            ).fetchone()
+            rejected = self.connection.execute(
+                "SELECT COUNT(*) FROM engagement_rejections"
+            ).fetchone()
+        return {
+            "pending": int(pending[0] if pending else 0),
+            "rejected": int(rejected[0] if rejected else 0),
+        }
+
     def save_draft(self, draft: DraftContract) -> DraftContract:
         draft.validate()
         timestamp = now_iso()
@@ -260,35 +462,46 @@ class WriterStore:
             version = parent.version + 1
         timestamp = piece.created_at or now_iso()
         with self._lock:
-            cursor = self.connection.execute(
-                "INSERT INTO pieces "
-                "(kind, version, parent_id, title, dek, body, tags_json, "
-                "sources_json, credit_lines_json, voice_warnings_json, "
-                "voice_sample_ids_json, angle, target_length, created_at, "
-                "schema_version) VALUES "
-                "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (
-                    piece.kind,
-                    version,
-                    piece.parent_id,
-                    piece.title,
-                    piece.dek,
-                    piece.body,
-                    _json(piece.tags),
-                    _json(piece.sources),
-                    _json(piece.credit_lines),
-                    _json(piece.voice_warnings),
-                    _json(piece.voice_sample_ids),
-                    piece.angle,
-                    piece.target_length,
-                    timestamp,
-                    piece.schema_version,
-                ),
-            )
-            self.connection.commit()
+            try:
+                cursor = self.connection.execute(
+                    "INSERT INTO pieces "
+                    "(kind, version, parent_id, title, dek, body, tags_json, "
+                    "sources_json, credit_lines_json, voice_warnings_json, "
+                    "voice_sample_ids_json, angle, target_length, created_at, "
+                    "schema_version) VALUES "
+                    "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        piece.kind,
+                        version,
+                        piece.parent_id,
+                        piece.title,
+                        piece.dek,
+                        piece.body,
+                        _json(piece.tags),
+                        _json(piece.sources),
+                        _json(piece.credit_lines),
+                        _json(piece.voice_warnings),
+                        _json(piece.voice_sample_ids),
+                        piece.angle,
+                        piece.target_length,
+                        timestamp,
+                        piece.schema_version,
+                    ),
+                )
+                piece_id = int(cursor.lastrowid)
+                self._enqueue_cite_events(
+                    entity_kind="piece",
+                    entity_id=piece_id,
+                    entity_version=version,
+                    sources=piece.sources,
+                )
+                self.connection.commit()
+            except Exception:
+                self.connection.rollback()
+                raise
         return replace(
             piece,
-            id=int(cursor.lastrowid),
+            id=piece_id,
             version=version,
             created_at=timestamp,
         )
@@ -498,35 +711,46 @@ class WriterStore:
             version = parent.version + 1
         timestamp = script.created_at or now_iso()
         with self._lock:
-            cursor = self.connection.execute(
-                "INSERT INTO scripts "
-                "(version, parent_id, format, target_length_sec, hook, "
-                "beats_json, body, cta, shots_json, sources_json, "
-                "assembly_query_json, created_at, schema_version) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (
-                    version,
-                    script.parent_id,
-                    script.format,
-                    script.target_length_sec,
-                    script.hook,
-                    _json(script.beats),
-                    script.body,
-                    script.cta,
-                    _json(script.shots),
-                    _json(script.sources),
+            try:
+                cursor = self.connection.execute(
+                    "INSERT INTO scripts "
+                    "(version, parent_id, format, target_length_sec, hook, "
+                    "beats_json, body, cta, shots_json, sources_json, "
+                    "assembly_query_json, created_at, schema_version) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (
-                        _json(script.assembly_query)
-                        if script.assembly_query is not None else None
+                        version,
+                        script.parent_id,
+                        script.format,
+                        script.target_length_sec,
+                        script.hook,
+                        _json(script.beats),
+                        script.body,
+                        script.cta,
+                        _json(script.shots),
+                        _json(script.sources),
+                        (
+                            _json(script.assembly_query)
+                            if script.assembly_query is not None else None
+                        ),
+                        timestamp,
+                        script.schema_version,
                     ),
-                    timestamp,
-                    script.schema_version,
-                ),
-            )
-            self.connection.commit()
+                )
+                script_id = int(cursor.lastrowid)
+                self._enqueue_cite_events(
+                    entity_kind="script",
+                    entity_id=script_id,
+                    entity_version=version,
+                    sources=script.sources,
+                )
+                self.connection.commit()
+            except Exception:
+                self.connection.rollback()
+                raise
         return replace(
             script,
-            id=int(cursor.lastrowid),
+            id=script_id,
             version=version,
             created_at=timestamp,
         )

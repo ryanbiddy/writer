@@ -8,11 +8,13 @@ from __future__ import annotations
 
 import json
 import os
+import sqlite3
 import sys
 from pathlib import Path
 from typing import Any, Callable
 
 from writer import voice_dna
+from writer.engagement import EngagementDelivery
 from writer.schemas import (
     AssemblyQuery,
     Beat,
@@ -110,12 +112,13 @@ class WriterTools:
         self.writing = WritingService(store, uoink=uoink)
         self.scripts = ScriptService(store, uoink=uoink)
         self.uoink = uoink
+        self.engagement = EngagementDelivery(store, uoink=uoink)
 
     @staticmethod
     def _call(function: Callable[[], dict[str, Any]]) -> dict[str, Any]:
         try:
             return function()
-        except (ValueError, OSError, RuntimeError) as exc:
+        except (ValueError, OSError, RuntimeError, sqlite3.Error) as exc:
             return _err(str(exc))
 
     def prepare_draft(
@@ -169,7 +172,11 @@ class WriterTools:
             payload = dict(piece)
             payload["sources"] = _source_list(payload.get("sources"))
             saved = self.writing.save_piece(**payload)
-            return _ok(piece=saved.to_dict())
+            return _ok(
+                piece=saved.to_dict(),
+                engagement=self.engagement.deliver_entity(
+                    "piece", int(saved.id)),
+            )
         return self._call(work)
 
     def list_pieces(
@@ -203,7 +210,11 @@ class WriterTools:
                 payload["assembly_query"] = _assembly(
                     payload["assembly_query"])
             saved = self.scripts.save_script(**payload)
-            return _ok(script=saved.to_dict())
+            return _ok(
+                script=saved.to_dict(),
+                engagement=self.engagement.deliver_entity(
+                    "script", int(saved.id)),
+            )
         return self._call(work)
 
     def critique_script(
@@ -245,12 +256,22 @@ class WriterTools:
             saved = self.save_script(payload)
             if not saved.get("ok"):
                 return saved
-            return _ok(mode="persisted", script=saved["script"])
+            return _ok(
+                mode="persisted",
+                script=saved["script"],
+                engagement=saved["engagement"],
+            )
         return self._call(work)
 
     def derive_shot_list(self, script_id: int) -> dict[str, Any]:
-        return self._call(lambda: _ok(
-            script=self.scripts.derive_shots(script_id).to_dict()))
+        def work() -> dict[str, Any]:
+            saved = self.scripts.derive_shots(script_id)
+            return _ok(
+                script=saved.to_dict(),
+                engagement=self.engagement.deliver_entity(
+                    "script", int(saved.id)),
+            )
+        return self._call(work)
 
     def export_shot_list(
             self, script_id: int, output: str,
@@ -299,6 +320,7 @@ class WriterTools:
                 "configured" if self.uoink is not None
                 else "not_configured"
             ),
+            engagement=self.store.engagement_status(),
             counts={
                 "drafts": len(self.store.list_drafts(limit=500)),
                 "pieces": len(self.store.list_pieces(limit=500)),
@@ -312,7 +334,12 @@ class WriterTools:
 def _optional_uoink() -> UoinkClient | None:
     if not str(os.environ.get(UOINK_TOKEN_ENV) or "").strip():
         return None
-    return UoinkClient.from_env()
+    try:
+        return UoinkClient.from_env()
+    except (OSError, RuntimeError, ValueError):
+        # Optional peer drift must not prevent Writer's direct MCP server
+        # from starting. `writer doctor` retains the exact unhealthy result.
+        return None
 
 
 def build_server(tools: WriterTools | None = None):

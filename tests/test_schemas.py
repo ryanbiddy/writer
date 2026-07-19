@@ -57,6 +57,25 @@ def test_uoink_reference_is_opaque_and_portable():
     assert "path" not in source.to_dict()
 
 
+@pytest.mark.parametrize(
+    "provider_ref",
+    (
+        "uoink://item/",
+        "uoink://item/one/two",
+        "uoink://item/one%2Ftwo",
+        "uoink://item/bad%ZZ",
+        "uoink://item/one?path=two",
+        "file:///private/item",
+    ),
+)
+def test_uoink_reference_identifies_one_stable_item(provider_ref):
+    with pytest.raises(SchemaError, match="identify one"):
+        SourceSnapshot(
+            provider="uoink",
+            provider_ref=provider_ref,
+        ).validate()
+
+
 def test_piece_retains_every_required_credit():
     source = SourceSnapshot(
         provider="url",

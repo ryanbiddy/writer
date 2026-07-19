@@ -7,6 +7,7 @@ import os
 import sys
 
 from writer import __version__
+from writer import suite_service
 from writer.auth import ensure_token
 from writer.http_api import DEFAULT_HOST, DEFAULT_PORT, create_server
 from writer.uoink_client import UOINK_TOKEN_ENV, UoinkClient
@@ -41,7 +42,13 @@ def main(argv: list[str] | None = None) -> int:
         token = ensure_token()
         uoink = None
         if str(os.environ.get(UOINK_TOKEN_ENV) or "").strip():
-            uoink = UoinkClient.from_env()
+            try:
+                uoink = UoinkClient.from_env()
+            except (OSError, RuntimeError, ValueError) as error:
+                print(
+                    f"Writer optional Uoink peer is unavailable: {error}",
+                    file=sys.stderr,
+                )
         server = create_server(
             host=parsed.host,
             port=parsed.port,
@@ -49,7 +56,23 @@ def main(argv: list[str] | None = None) -> int:
             database=parsed.database,
             uoink=uoink,
         )
+        actual_host = str(server.server_address[0])
         actual_port = int(server.server_address[1])
+        suite_started_at = suite_service.utc_now()
+        suite_lease_path = None
+        try:
+            suite_lease_path = suite_service.write_runtime_lease(
+                service_version=__version__,
+                host=actual_host,
+                port=actual_port,
+                pid=os.getpid(),
+                started_at=suite_started_at,
+            )
+        except OSError as error:
+            print(
+                f"Writer suite runtime lease is unavailable: {error}",
+                file=sys.stderr,
+            )
         print(
             f"Writer is ready at "
             f"http://127.0.0.1:{actual_port}/#token={token}")
@@ -59,6 +82,12 @@ def main(argv: list[str] | None = None) -> int:
         except KeyboardInterrupt:
             pass
         finally:
+            if suite_lease_path is not None:
+                suite_service.remove_runtime_lease(
+                    suite_lease_path,
+                    pid=os.getpid(),
+                    started_at=suite_started_at,
+                )
             server.server_close()
         return 0
     print(f"unknown command: {args[0]}", file=sys.stderr)

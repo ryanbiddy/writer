@@ -182,13 +182,21 @@ def main(argv: list[str] | None = None) -> int:
         )
 
         human = writer("doctor")
+        optional_uoink_states = (
+            "absent",
+            "unconfigured",
+            "unhealthy",
+        )
         human_ok = (
             human.returncode == 0
             and "READY for local writing" in human.stdout
             and "[ok] database: ready" in human.stdout
             and "[ok] packaged_data: ready" in human.stdout
             and "[ok] mcp: ready" in human.stdout
-            and "[optional] uoink: not_configured" in human.stdout
+            and any(
+                f"[optional] uoink: {state}" in human.stdout
+                for state in optional_uoink_states
+            )
         )
         record(
             "doctor",
@@ -212,7 +220,11 @@ def main(argv: list[str] | None = None) -> int:
                 and checks["database"]["ok"] is True
                 and checks["packaged_data"]["ok"] is True
                 and checks["mcp"]["status"] == "ready"
-                and checks["uoink"]["status"] == "not_configured"
+                and checks["uoink"]["status"] in optional_uoink_states
+                and checks["uoink"]["result"]["contract"]
+                == "ryan.suite.peer"
+                and checks["uoink"]["result"]["state"]
+                == checks["uoink"]["status"]
             )
         except (KeyError, TypeError, json.JSONDecodeError):
             machine_ok = False
@@ -221,7 +233,7 @@ def main(argv: list[str] | None = None) -> int:
             "doctor-json",
             "PASS" if machine_ok else "FAIL",
             (
-                "required checks ready; optional Uoink absence explicit"
+                "required checks ready; optional Uoink peer state explicit"
                 if machine_ok else "doctor JSON was incomplete or false"
             ),
             "" if machine_ok else machine.stdout + machine.stderr,

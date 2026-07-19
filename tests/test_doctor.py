@@ -5,10 +5,22 @@ import json
 from writer import doctor
 
 
+ABSENT_PEER = {
+    "ok": True,
+    "contract": "ryan.suite.peer",
+    "version": 1,
+    "peer": "uoink",
+    "state": "absent",
+    "capabilities": [],
+}
+
+
 def test_doctor_json_reports_required_and_optional_truth(
         tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("WRITER_DATA_DIR", str(tmp_path / "writer-data"))
     monkeypatch.delenv("WRITER_UOINK_TOKEN", raising=False)
+    monkeypatch.setattr(
+        doctor, "probe_uoink", lambda **kwargs: ABSENT_PEER)
 
     assert doctor.run(["--json"]) == 0
     payload = json.loads(capsys.readouterr().out)
@@ -19,7 +31,8 @@ def test_doctor_json_reports_required_and_optional_truth(
     assert checks["database"]["status"] == "ready"
     assert checks["packaged_data"]["status"] == "ready"
     assert checks["uoink"]["required"] is False
-    assert checks["uoink"]["status"] == "not_configured"
+    assert checks["uoink"]["status"] == "absent"
+    assert checks["uoink"]["result"] == ABSENT_PEER
     assert payload["summary"]["required_ready"] == 2
     assert payload["summary"]["required_total"] == 2
 
@@ -28,13 +41,15 @@ def test_doctor_human_output_leads_with_verdict(
         tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("WRITER_DATA_DIR", str(tmp_path / "writer-data"))
     monkeypatch.delenv("WRITER_UOINK_TOKEN", raising=False)
+    monkeypatch.setattr(
+        doctor, "probe_uoink", lambda **kwargs: ABSENT_PEER)
 
     assert doctor.run([]) == 0
     lines = capsys.readouterr().out.splitlines()
 
     assert lines[:2] == ["Writer doctor", "READY for local writing"]
     assert any(
-        line.startswith("[optional] uoink: not_configured")
+        line.startswith("[optional] uoink: absent")
         for line in lines
     )
 
