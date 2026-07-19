@@ -233,7 +233,7 @@ def main(argv: list[str] | None = None) -> int:
             server = config_payload["mcpServers"]["writer"]
             config_ok = (
                 config.returncode == 0
-                and server["command"] == str(python)
+                and Path(server["command"]).resolve() == python.resolve()
                 and server["args"] == [
                     "-m", "writer.cli", "serve-mcp"]
             )
