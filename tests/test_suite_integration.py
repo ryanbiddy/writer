@@ -634,6 +634,15 @@ def test_engagement_client_sends_and_validates_exact_batch(
         "body": request,
     }
 
+    with pytest.raises(UoinkContractError) as raised:
+        validate_engagement_response(
+            fixture["valid"]["engagement"]["accepted"],
+            status=503,
+            submitted=1,
+        )
+    assert raised.value.code == "contract_mismatch"
+    assert raised.value.status == 503
+
     drifted = copy.deepcopy(fixture["valid"]["engagement"]["accepted"])
     drifted["data"]["unknown"] = True
     with pytest.raises(UoinkContractError) as raised:

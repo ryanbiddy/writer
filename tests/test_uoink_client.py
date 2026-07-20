@@ -159,6 +159,15 @@ def test_strict_envelope_rejects_drift():
         validate_envelope("search", wrong_version)
 
 
+def test_success_envelope_cannot_hide_http_failure():
+    with pytest.raises(UoinkContractError) as raised:
+        validate_envelope("search", FIXTURE["search"], status=500)
+
+    assert raised.value.code == "contract_mismatch"
+    assert raised.value.status == 500
+    assert "HTTP status" in raised.value.message
+
+
 def test_absent_uoink_fails_calmly():
     client = UoinkClient(
         "http://127.0.0.1:1", "fixture-token", timeout=0.1)

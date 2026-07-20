@@ -118,6 +118,8 @@ class WriterTools:
     def _call(function: Callable[[], dict[str, Any]]) -> dict[str, Any]:
         try:
             return function()
+        except (AttributeError, KeyError, TypeError) as exc:
+            return _err(f"invalid request: {exc}")
         except (ValueError, OSError, RuntimeError, sqlite3.Error) as exc:
             return _err(str(exc))
 
@@ -321,13 +323,7 @@ class WriterTools:
                 else "not_configured"
             ),
             engagement=self.store.engagement_status(),
-            counts={
-                "drafts": len(self.store.list_drafts(limit=500)),
-                "pieces": len(self.store.list_pieces(limit=500)),
-                "scripts": len(self.store.list_scripts(limit=500)),
-                "voice_samples": len(
-                    self.store.list_voice_samples()),
-            },
+            counts=self.store.entity_counts(),
         )
 
 

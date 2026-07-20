@@ -213,6 +213,37 @@ class WriterHandler(BaseHTTPRequestHandler):
             return
         self._tool_result(result)
 
+    def _query_limit(self, query: dict[str, list[str]]) -> int | None:
+        raw = (query.get("limit") or ["100"])[0]
+        try:
+            limit = int(raw)
+        except (TypeError, ValueError):
+            limit = 0
+        if not 1 <= limit <= 500:
+            self._json(
+                400,
+                _failure(
+                    "invalid_request",
+                    "limit must be an integer between 1 and 500",
+                ),
+            )
+            return None
+        return limit
+
+    def _query_flag(
+            self, query: dict[str, list[str]], name: str) -> bool | None:
+        raw = (query.get(name) or ["0"])[0]
+        if raw not in {"0", "1"}:
+            self._json(
+                400,
+                _failure(
+                    "invalid_request",
+                    f"{name} must be 0 or 1",
+                ),
+            )
+            return None
+        return raw == "1"
+
     def do_OPTIONS(self):  # noqa: N802
         if self._reject_bad_host():
             return
@@ -270,7 +301,9 @@ class WriterHandler(BaseHTTPRequestHandler):
             return
         query = urllib.parse.parse_qs(parsed.query)
         if path == "/api/writer/v1/drafts":
-            limit = int((query.get("limit") or ["100"])[0])
+            limit = self._query_limit(query)
+            if limit is None:
+                return
             self._json(200, _success(drafts=[
                 draft.to_dict()
                 for draft in self.server.store.list_drafts(limit=limit)
@@ -283,10 +316,13 @@ class WriterHandler(BaseHTTPRequestHandler):
                 self.tools.get_draft, int(match.group(1)))
             return
         if path == "/api/writer/v1/pieces":
+            limit = self._query_limit(query)
+            if limit is None:
+                return
             self._dispatch(
                 self.tools.list_pieces,
                 kind=(query.get("kind") or [""])[0],
-                limit=int((query.get("limit") or ["100"])[0]),
+                limit=limit,
             )
             return
         match = re.fullmatch(
@@ -300,7 +336,9 @@ class WriterHandler(BaseHTTPRequestHandler):
                 self._json(200, _success(piece=piece.to_dict()))
             return
         if path == "/api/writer/v1/scripts":
-            limit = int((query.get("limit") or ["100"])[0])
+            limit = self._query_limit(query)
+            if limit is None:
+                return
             self._json(200, _success(scripts=[
                 script.to_dict()
                 for script in self.server.store.list_scripts(limit=limit)
@@ -317,8 +355,9 @@ class WriterHandler(BaseHTTPRequestHandler):
                 self._json(200, _success(script=script.to_dict()))
             return
         if path == "/api/writer/v1/voice-samples":
-            active_only = (
-                (query.get("active_only") or ["0"])[0] == "1")
+            active_only = self._query_flag(query, "active_only")
+            if active_only is None:
+                return
             self._dispatch(
                 self.tools.list_voice_samples, active_only)
             return
