@@ -24,9 +24,12 @@ Writer does not own:
 ## Product calls
 
 The optional Uoink connection is loopback HTTP on port 5179 with Uoink's
-per-install token supplied by the user or process environment. Writer accepts
-only the `uoink.corpus.read` v1 envelopes for search, get, facets, taste, and
-assemble.
+per-install token supplied by the user or process environment. Uoink content
+enters Writer only through `uoink.corpus.read` v1 envelopes for search, get,
+facets, taste, and assemble. Writer can send its own durable `cite` events
+through the separately ratified `uoink.engagement.ingest` v1 contract. Suite
+manifest, health, and runtime-lease reads are operational discovery, not
+corpus access.
 
 Writer's loopback server uses port 5181 and a Writer-owned token. AI clients
 register Writer's stdio MCP server directly. There is no suite MCP proxy and

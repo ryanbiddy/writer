@@ -351,6 +351,23 @@ class WriterStore:
             "rejected": int(rejected[0] if rejected else 0),
         }
 
+    def entity_counts(self) -> dict[str, int]:
+        """Return exact Writer-owned record counts without list-page caps."""
+        with self._lock:
+            row = self.connection.execute(
+                "SELECT "
+                "(SELECT COUNT(*) FROM drafts) AS drafts, "
+                "(SELECT COUNT(*) FROM pieces) AS pieces, "
+                "(SELECT COUNT(*) FROM scripts) AS scripts, "
+                "(SELECT COUNT(*) FROM voice_samples) AS voice_samples"
+            ).fetchone()
+        return {
+            "drafts": int(row["drafts"]),
+            "pieces": int(row["pieces"]),
+            "scripts": int(row["scripts"]),
+            "voice_samples": int(row["voice_samples"]),
+        }
+
     def save_draft(self, draft: DraftContract) -> DraftContract:
         draft.validate()
         timestamp = now_iso()

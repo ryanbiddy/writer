@@ -120,6 +120,14 @@ def _mismatch(message: str) -> UoinkContractError:
     return UoinkContractError("contract_mismatch", message)
 
 
+def _status_mismatch(status: int) -> UoinkContractError:
+    return UoinkContractError(
+        "contract_mismatch",
+        f"success envelope is invalid for HTTP status {status}",
+        status=status,
+    )
+
+
 def _exact(value: Any, expected: set[str], label: str) -> dict:
     if not isinstance(value, dict):
         raise _mismatch(f"{label} must be an object")
@@ -370,6 +378,8 @@ def validate_envelope(operation: str, payload: Any, *,
     if payload["operation"] != operation:
         raise _mismatch(
             f"operation must be {operation}")
+    if ok is True and not 200 <= status < 300:
+        raise _status_mismatch(status)
     if ok is not True:
         if ok is not False:
             raise _mismatch("contract response.ok must be boolean")
@@ -481,6 +491,8 @@ def validate_engagement_response(
         or payload["version"] != 1
     ):
         raise _mismatch("engagement response contract must be version 1")
+    if ok is True and not 200 <= status < 300:
+        raise _status_mismatch(status)
     if ok is not True:
         if ok is not False:
             raise _mismatch("engagement response.ok must be boolean")

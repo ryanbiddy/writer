@@ -141,6 +141,39 @@ def test_invalid_request_returns_json_instead_of_dropping_connection(
     assert payload["error"]["code"] == "invalid_request"
 
 
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/api/writer/v1/drafts?limit=nope",
+        "/api/writer/v1/pieces?limit=0",
+        "/api/writer/v1/scripts?limit=501",
+    ],
+)
+def test_invalid_list_limit_returns_json_instead_of_dropping_connection(
+        writer_http, path):
+    status, payload = call(writer_http, "GET", path)
+
+    assert status == 400
+    assert payload["error"] == {
+        "code": "invalid_request",
+        "message": "limit must be an integer between 1 and 500",
+    }
+
+
+def test_invalid_active_only_flag_returns_json(writer_http):
+    status, payload = call(
+        writer_http,
+        "GET",
+        "/api/writer/v1/voice-samples?active_only=maybe",
+    )
+
+    assert status == 400
+    assert payload["error"] == {
+        "code": "invalid_request",
+        "message": "active_only must be 0 or 1",
+    }
+
+
 def test_manual_draft_and_source_free_prepare_round_trip(writer_http):
     status, saved = call(writer_http, "POST", "/api/writer/v1/drafts", {
         "kind": "blog",
