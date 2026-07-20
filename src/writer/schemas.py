@@ -52,6 +52,26 @@ def _kind(value: str) -> None:
             "kind must be one of " + ", ".join(WRITING_KINDS))
 
 
+def is_valid_source_url(value: Any) -> bool:
+    """True for the suite's only valid cross-product URL values."""
+    if value is None:
+        return True
+    if not isinstance(value, str) or not value or "\\" in value or any(
+            character.isspace() for character in value):
+        return False
+    try:
+        parsed = urllib.parse.urlsplit(value)
+        # Accessing port rejects malformed netlocs such as `:abc`.
+        parsed.port
+    except ValueError:
+        return False
+    return (
+        parsed.scheme.lower() in {"http", "https"}
+        and bool(parsed.netloc)
+        and parsed.hostname is not None
+    )
+
+
 @dataclass(frozen=True)
 class SourceSnapshot(JsonContract):
     """Portable display data for one attached source.
@@ -65,7 +85,7 @@ class SourceSnapshot(JsonContract):
     provider_ref: str = ""
     title: str = ""
     creator: str = ""
-    source_url: str = ""
+    source_url: str | None = None
     credit_line: str = ""
     excerpt: str = ""
     attached_at: str = ""
@@ -102,6 +122,9 @@ class SourceSnapshot(JsonContract):
                 raise SchemaError(
                     "uoink source.provider_ref must identify one "
                     "uoink://item/<id>")
+        if not is_valid_source_url(self.source_url):
+            raise SchemaError(
+                "source.source_url must be null or an HTTP(S) URL")
         if self.credit_required and not self.credit_line.strip():
             raise SchemaError(
                 "external source requires a display-safe credit_line")
@@ -109,7 +132,13 @@ class SourceSnapshot(JsonContract):
 
     @classmethod
     def from_dict(cls, value: dict[str, Any]) -> "SourceSnapshot":
-        return cls(**value).validate()
+        data = dict(value)
+        # Pre-launch v1 snapshots represented an absent URL as "". Normalize
+        # that legacy local value on read; every newly serialized snapshot
+        # uses the contract's null representation.
+        if data.get("source_url") == "":
+            data["source_url"] = None
+        return cls(**data).validate()
 
 
 @dataclass

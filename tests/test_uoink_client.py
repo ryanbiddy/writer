@@ -168,6 +168,27 @@ def test_success_envelope_cannot_hide_http_failure():
     assert "HTTP status" in raised.value.message
 
 
+@pytest.mark.parametrize("location", ["item", "credit"])
+@pytest.mark.parametrize("source_url", [
+    "file:///tmp/source.md",
+    "C:\\Users\\Ryan\\source.md",
+    "/tmp/source.md",
+    "ftp://example.test/source.md",
+    "https://",
+])
+def test_strict_envelope_rejects_non_http_source_urls(
+        location, source_url):
+    payload = copy.deepcopy(FIXTURE["get"])
+    if location == "item":
+        payload["data"]["item"]["source_url"] = source_url
+    else:
+        payload["data"]["item"]["credit"]["source_url"] = source_url
+    with pytest.raises(
+            UoinkContractError,
+            match=r"must be null or an HTTP\(S\) URL"):
+        validate_envelope("get", payload)
+
+
 def test_absent_uoink_fails_calmly():
     client = UoinkClient(
         "http://127.0.0.1:1", "fixture-token", timeout=0.1)
