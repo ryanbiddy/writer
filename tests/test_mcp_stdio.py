@@ -10,6 +10,8 @@ from pathlib import Path
 
 import pytest
 
+from writer import __version__
+
 try:
     import mcp  # noqa: F401
 
@@ -46,6 +48,10 @@ def test_all_17_tools_roundtrip_over_real_stdio(tmp_path):
     assert result.returncode == 0, result.stdout + result.stderr
     report = json.loads(result.stdout)
     assert report["ok"] is True
+    assert report["server"] == {
+        "name": "writer",
+        "version": __version__,
+    }
     assert report["tool_count"] == 17
     assert len(report["listed_tools"]) == 17
     assert report["called_tools"] == report["listed_tools"]

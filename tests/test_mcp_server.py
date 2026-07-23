@@ -4,6 +4,7 @@ import asyncio
 
 import pytest
 
+from writer import __version__
 from writer.mcp_server import TOOL_NAMES, WriterTools, build_server
 from writer.storage import WriterStore
 
@@ -45,6 +46,7 @@ def test_fastmcp_registers_the_same_surface(tmp_path):
                 tool.name for tool in await server.list_tools()}
 
         assert asyncio.run(names()) == EXPECTED_TOOLS
+        assert server._mcp_server.version == __version__
     finally:
         store.close()
 
