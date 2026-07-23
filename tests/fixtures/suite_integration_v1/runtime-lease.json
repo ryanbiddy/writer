@@ -1,0 +1,237 @@
+{
+  "contract": "ryan.suite.runtime-lease/1",
+  "cases": [
+    {
+      "id": "valid_uoink",
+      "expected_valid": true,
+      "context": {
+        "expected_service": "uoink",
+        "live_pids": [1234]
+      },
+      "payload": {
+        "contract": "ryan.suite.runtime-lease",
+        "version": 1,
+        "service_id": "uoink",
+        "service_version": "3.6.0",
+        "api_version": 1,
+        "base_url": "http://127.0.0.1:5179",
+        "health_url": "http://127.0.0.1:5179/api/suite/v1/health",
+        "manifest_url": "http://127.0.0.1:5179/.well-known/suite-service.json",
+        "capabilities": [
+          "uoink.corpus.read/1",
+          "uoink.engagement.ingest/1",
+          "uoink.media.handoff/1"
+        ],
+        "ui": {
+          "home": "/dashboard",
+          "routes": {
+            "library": "/dashboard#library"
+          }
+        },
+        "pid": 1234,
+        "started_at": "2026-07-19T12:00:00Z"
+      }
+    },
+    {
+      "id": "valid_writer",
+      "expected_valid": true,
+      "context": {
+        "expected_service": "writer",
+        "live_pids": [5678]
+      },
+      "payload": {
+        "contract": "ryan.suite.runtime-lease",
+        "version": 1,
+        "service_id": "writer",
+        "service_version": "0.1.0",
+        "api_version": 1,
+        "base_url": "http://127.0.0.1:5181",
+        "health_url": "http://127.0.0.1:5181/api/suite/v1/health",
+        "manifest_url": "http://127.0.0.1:5181/.well-known/suite-service.json",
+        "capabilities": [
+          "writer.api/1",
+          "writer.shot-list/1"
+        ],
+        "ui": {
+          "home": "/",
+          "routes": {}
+        },
+        "pid": 5678,
+        "started_at": "2026-07-19T12:00:00Z"
+      }
+    },
+    {
+      "id": "unknown_key",
+      "base": "valid_uoink",
+      "expected_valid": false,
+      "mutations": [
+        {
+          "op": "set",
+          "path": ["unexpected"],
+          "value": true
+        }
+      ]
+    },
+    {
+      "id": "non_loopback_url",
+      "base": "valid_uoink",
+      "expected_valid": false,
+      "mutations": [
+        {
+          "op": "set",
+          "path": ["base_url"],
+          "value": "http://192.0.2.10:5179"
+        }
+      ]
+    },
+    {
+      "id": "valid_service_local_ui_paths",
+      "base": "valid_uoink",
+      "expected_valid": true,
+      "mutations": [
+        {
+          "op": "set",
+          "path": ["ui", "home"],
+          "value": "/library"
+        },
+        {
+          "op": "set",
+          "path": ["ui", "routes", "library"],
+          "value": "/library"
+        }
+      ]
+    },
+    {
+      "id": "network_path_home",
+      "base": "valid_uoink",
+      "expected_valid": false,
+      "mutations": [
+        {
+          "op": "set",
+          "path": ["ui", "home"],
+          "value": "//attacker.example/x"
+        }
+      ]
+    },
+    {
+      "id": "backslash_home",
+      "base": "valid_uoink",
+      "expected_valid": false,
+      "mutations": [
+        {
+          "op": "set",
+          "path": ["ui", "home"],
+          "value": "/\\host"
+        }
+      ]
+    },
+    {
+      "id": "absolute_url_home",
+      "base": "valid_uoink",
+      "expected_valid": false,
+      "mutations": [
+        {
+          "op": "set",
+          "path": ["ui", "home"],
+          "value": "https://attacker.example/x"
+        }
+      ]
+    },
+    {
+      "id": "network_path_route",
+      "base": "valid_uoink",
+      "expected_valid": false,
+      "mutations": [
+        {
+          "op": "set",
+          "path": ["ui", "routes", "library"],
+          "value": "//attacker.example/x"
+        }
+      ]
+    },
+    {
+      "id": "backslash_route",
+      "base": "valid_uoink",
+      "expected_valid": false,
+      "mutations": [
+        {
+          "op": "set",
+          "path": ["ui", "routes", "library"],
+          "value": "/\\host"
+        }
+      ]
+    },
+    {
+      "id": "absolute_url_route",
+      "base": "valid_uoink",
+      "expected_valid": false,
+      "mutations": [
+        {
+          "op": "set",
+          "path": ["ui", "routes", "library"],
+          "value": "https://attacker.example/x"
+        }
+      ]
+    },
+    {
+      "id": "token_field",
+      "base": "valid_uoink",
+      "expected_valid": false,
+      "mutations": [
+        {
+          "op": "set",
+          "path": ["token"],
+          "value": "synthetic-forbidden-token"
+        }
+      ]
+    },
+    {
+      "id": "path_field",
+      "base": "valid_uoink",
+      "expected_valid": false,
+      "mutations": [
+        {
+          "op": "set",
+          "path": ["database_path"],
+          "value": "C:\\SuiteFixture\\uoink.db"
+        }
+      ]
+    },
+    {
+      "id": "command_field",
+      "base": "valid_uoink",
+      "expected_valid": false,
+      "mutations": [
+        {
+          "op": "set",
+          "path": ["command"],
+          "value": "python -m uoink"
+        }
+      ]
+    },
+    {
+      "id": "wrong_identity",
+      "base": "valid_uoink",
+      "expected_valid": false,
+      "mutations": [
+        {
+          "op": "set",
+          "path": ["service_id"],
+          "value": "writer"
+        }
+      ]
+    },
+    {
+      "id": "dead_pid",
+      "base": "valid_uoink",
+      "expected_valid": false,
+      "mutations": [
+        {
+          "op": "set",
+          "path": ["pid"],
+          "value": 9999
+        }
+      ]
+    }
+  ]
+}
