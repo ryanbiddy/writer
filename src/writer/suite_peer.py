@@ -142,17 +142,31 @@ def _base_url(value: Any, *, code: str) -> str:
 
 def _ui(value: Any, *, code: str) -> dict:
     value = _exact(value, {"home", "routes"}, "ui", code=code)
-    if not isinstance(value["home"], str) or not value["home"].startswith("/"):
+    if not _is_service_ui_path(value["home"]):
         raise _error(code, "ui.home must be a relative service path")
     routes = value["routes"]
     if not isinstance(routes, dict) or any(
         not isinstance(name, str)
-        or not isinstance(path, str)
-        or not path.startswith("/")
+        or not _is_service_ui_path(path)
         for name, path in routes.items()
     ):
         raise _error(code, "ui.routes must contain relative service paths")
     return value
+
+
+def _is_service_ui_path(value: Any) -> bool:
+    if (
+        not isinstance(value, str)
+        or not value.startswith("/")
+        or value.startswith("//")
+        or "\\" in value
+    ):
+        return False
+    try:
+        parsed = urllib.parse.urlsplit(value)
+    except ValueError:
+        return False
+    return not parsed.scheme and not parsed.netloc
 
 
 def _capabilities(value: Any, *, code: str) -> list[str]:

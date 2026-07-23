@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import os
 import threading
@@ -37,6 +38,13 @@ from writer.uoink_client import (
 
 ROOT = Path(__file__).resolve().parent.parent
 FIXTURE_PATH = ROOT / "tests" / "fixtures" / "uoink-suite-v1.json"
+SHARED_UI_PATH = (
+    ROOT / "tests" / "fixtures" / "suite_integration_v1"
+    / "runtime-lease.json"
+)
+SHARED_UI_PROVENANCE_PATH = SHARED_UI_PATH.with_name(
+    "runtime-lease.provenance.json"
+)
 
 
 def _negative(fixture: dict, group: str, name: str) -> dict:
@@ -62,6 +70,20 @@ def _negative(fixture: dict, group: str, name: str) -> dict:
     else:
         raise AssertionError(f"unknown fixture operation: {mutation}")
     return payload
+
+
+def _shared_ui_case(case_id: str) -> tuple[dict, dict]:
+    fixture = json.loads(SHARED_UI_PATH.read_text(encoding="utf-8"))
+    cases = {case["id"]: case for case in fixture["cases"]}
+    case = cases[case_id]
+    payload = copy.deepcopy(cases[case["base"]]["payload"])
+    for mutation in case.get("mutations", []):
+        assert mutation["op"] == "set"
+        cursor = payload
+        for part in mutation["path"][:-1]:
+            cursor = cursor[part]
+        cursor[mutation["path"][-1]] = mutation["value"]
+    return case, payload
 
 
 def _source(item_id: str = "short-123") -> SourceSnapshot:
@@ -460,6 +482,62 @@ def test_strict_lease_manifest_and_health_validators():
         payload = _negative(fixture, "health", name)
         with pytest.raises(PeerError):
             validate_health(payload)
+
+
+def test_shared_ui_fixture_is_pinned_to_zing_provider():
+    provenance = json.loads(
+        SHARED_UI_PROVENANCE_PATH.read_text(encoding="utf-8")
+    )
+    digest = hashlib.sha256(SHARED_UI_PATH.read_bytes()).hexdigest().upper()
+    assert digest == provenance["fixture_sha256"]
+    assert provenance == {
+        "repository": "ryanbiddy/zing",
+        "commit": "8775c43c35456635e282b8a3e2bb2920f488db1a",
+        "fixture": "tools/eval/fixtures/suite_v1/runtime-lease.json",
+        "git_blob_sha": "74fb47e0baf3159ce7dbe19556bdaf4029f4a4ee",
+        "fixture_sha256": (
+            "F22C3CF37CA0470B39557693696A4B57F237BDFB10C09DC521FA72A500B3B06F"
+        ),
+        "copy_note": (
+            "The local copy is byte-for-byte identical to the pinned Zing blob."
+        ),
+    }
+
+
+@pytest.mark.parametrize(
+    "case_id",
+    [
+        "valid_service_local_ui_paths",
+        "network_path_home",
+        "backslash_home",
+        "absolute_url_home",
+        "network_path_route",
+        "backslash_route",
+        "absolute_url_route",
+    ],
+)
+def test_shared_ui_paths_cover_uoink_lease_and_manifest(case_id):
+    fixture = json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))
+    case, shared = _shared_ui_case(case_id)
+    lease = copy.deepcopy(fixture["valid"]["runtime_lease"])
+    lease["ui"] = shared["ui"]
+    manifest = copy.deepcopy(fixture["valid"]["service_manifest"])
+    manifest["service"]["ui"] = shared["ui"]
+
+    if case["expected_valid"]:
+        assert validate_runtime_lease(
+            lease, pid_checker=lambda _pid: True
+        )
+        assert validate_service_manifest(manifest)
+    else:
+        with pytest.raises(PeerError) as lease_error:
+            validate_runtime_lease(
+                lease, pid_checker=lambda _pid: True
+            )
+        assert lease_error.value.code == "invalid_lease"
+        with pytest.raises(PeerError) as manifest_error:
+            validate_service_manifest(manifest)
+        assert manifest_error.value.code == "contract_mismatch"
 
 
 def test_discovery_order_explicit_then_lease_then_default(
