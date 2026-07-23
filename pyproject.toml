@@ -7,7 +7,7 @@ name = "ryan-writer"
 version = "0.1.0.dev0"
 description = "Local-first prose and script drafting in the user's voice"
 readme = "README.md"
-license = { text = "MIT" }
+license = "MIT"
 requires-python = ">=3.11"
 dependencies = []
 
