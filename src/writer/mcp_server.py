@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 from typing import Any, Callable
 
-from writer import voice_dna
+from writer import __version__, voice_dna
 from writer.engagement import EngagementDelivery
 from writer.schemas import (
     AssemblyQuery,
@@ -351,6 +351,13 @@ def build_server(tools: WriterTools | None = None):
             "Uoink sources are optional. Writer never sends or posts copy."
         ),
     )
+    # FastMCP defaults initialize.serverInfo.version to the MCP SDK's version.
+    # Client diagnostics need Writer's version instead. Keep serving with the
+    # SDK fallback if a future v1-compatible SDK reshapes this internal.
+    try:
+        mcp._mcp_server.version = __version__
+    except AttributeError:
+        pass
     descriptions = {
         "prepare_draft": (
             "Prepare model-neutral prose context. Sources are optional; "

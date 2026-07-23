@@ -14,6 +14,7 @@ import queue
 import subprocess
 import sys
 import threading
+from importlib.metadata import version as distribution_version
 from pathlib import Path
 from typing import Any
 
@@ -185,6 +186,11 @@ def run_smoke(data_dir: Path) -> dict:
         if initialized["serverInfo"]["name"] != "writer":
             raise RuntimeError(
                 f"unexpected server identity: {initialized['serverInfo']}")
+        expected_version = distribution_version("ryan-writer")
+        if initialized["serverInfo"]["version"] != expected_version:
+            raise RuntimeError(
+                "serverInfo.version must report the Writer product version, "
+                f"not the MCP SDK version: {initialized['serverInfo']}")
         client.send(
             "notifications/initialized", {}, notify=True)
 
