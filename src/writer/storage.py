@@ -13,7 +13,7 @@ import sys
 import threading
 import uuid
 from dataclasses import replace
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from importlib.resources import files
 from pathlib import Path
 from typing import Any
@@ -40,6 +40,16 @@ def now_iso() -> str:
 
 def _utc_z() -> str:
     return now_iso().replace("+00:00", "Z")
+
+
+def _utc_z_at(value: datetime) -> str:
+    if value.tzinfo is None:
+        raise ValueError("engagement retry time must include a timezone")
+    return (
+        value.astimezone(timezone.utc)
+        .isoformat(timespec="seconds")
+        .replace("+00:00", "Z")
+    )
 
 
 def default_data_dir() -> Path:
@@ -148,7 +158,8 @@ class WriterStore:
                 self.connection.executescript(
                     resource.read_text(encoding="utf-8"))
                 self.connection.execute(
-                    "INSERT INTO schema_migrations (version, applied_at) "
+                    "INSERT OR IGNORE INTO schema_migrations "
+                    "(version, applied_at) "
                     "VALUES (?, ?)",
                     (version, now_iso()),
                 )
@@ -169,7 +180,7 @@ class WriterStore:
                 quick is not None
                 and str(quick[0]) == "ok"
                 and version is not None
-                and int(version[0]) >= 2
+                and int(version[0]) >= 3
             )
         except sqlite3.Error:
             return False
@@ -237,6 +248,7 @@ class WriterStore:
         entity_kind: str | None = None,
         entity_id: int | None = None,
         limit: int = 100,
+        due_at: datetime | None = None,
     ) -> list[dict[str, Any]]:
         clauses = []
         values: list[Any] = []
@@ -246,6 +258,9 @@ class WriterStore:
         if entity_id is not None:
             clauses.append("entity_id=?")
             values.append(int(entity_id))
+        if due_at is not None:
+            clauses.append("(next_attempt_at='' OR next_attempt_at<=?)")
+            values.append(_utc_z_at(due_at))
         where = " WHERE " + " AND ".join(clauses) if clauses else ""
         values.append(max(1, min(int(limit), 100)))
         with self._lock:
@@ -255,6 +270,60 @@ class WriterStore:
                 + " ORDER BY created_at, event_id LIMIT ?",
                 values,
             ).fetchall()
+        return [
+            {
+                "event": json.loads(str(row["event_json"])),
+                "entity_kind": str(row["entity_kind"]),
+                "entity_id": int(row["entity_id"]),
+                "entity_version": int(row["entity_version"]),
+                "attempts": int(row["attempts"]),
+                "last_error_code": str(row["last_error_code"] or ""),
+            }
+            for row in rows
+        ]
+
+    def claim_engagement(
+        self,
+        *,
+        entity_kind: str | None = None,
+        entity_id: int | None = None,
+        limit: int = 25,
+        claimed_at: datetime,
+    ) -> list[dict[str, Any]]:
+        """Atomically reserve one due batch across Writer processes."""
+        due_text = _utc_z_at(claimed_at)
+        claim_until = _utc_z_at(claimed_at + timedelta(seconds=60))
+        clauses = ["(next_attempt_at='' OR next_attempt_at<=?)"]
+        values: list[Any] = [due_text]
+        if entity_kind is not None:
+            clauses.append("entity_kind=?")
+            values.append(entity_kind)
+        if entity_id is not None:
+            clauses.append("entity_id=?")
+            values.append(int(entity_id))
+        values.append(max(1, min(int(limit), 100)))
+        with self._lock:
+            try:
+                self.connection.execute("BEGIN IMMEDIATE")
+                rows = self.connection.execute(
+                    "SELECT * FROM engagement_outbox WHERE "
+                    + " AND ".join(clauses)
+                    + " ORDER BY created_at, event_id LIMIT ?",
+                    values,
+                ).fetchall()
+                if rows:
+                    event_ids = [str(row["event_id"]) for row in rows]
+                    placeholders = ",".join("?" for _ in event_ids)
+                    self.connection.execute(
+                        "UPDATE engagement_outbox "
+                        "SET next_attempt_at=?, updated_at=? "
+                        f"WHERE event_id IN ({placeholders})",
+                        [claim_until, due_text, *event_ids],
+                    )
+                self.connection.commit()
+            except Exception:
+                self.connection.rollback()
+                raise
         return [
             {
                 "event": json.loads(str(row["event_json"])),
@@ -283,18 +352,47 @@ class WriterStore:
         self,
         event_ids: list[str],
         error_code: str,
+        *,
+        attempted_at: datetime | None = None,
     ) -> None:
         if not event_ids:
             return
-        placeholders = ",".join("?" for _ in event_ids)
+        attempted_at = attempted_at or datetime.now(timezone.utc)
+        attempted_text = _utc_z_at(attempted_at)
         with self._lock:
-            self.connection.execute(
-                f"UPDATE engagement_outbox "
-                f"SET attempts=attempts+1, last_error_code=?, updated_at=? "
-                f"WHERE event_id IN ({placeholders})",
-                [str(error_code), _utc_z(), *event_ids],
-            )
-            self.connection.commit()
+            try:
+                for event_id in event_ids:
+                    row = self.connection.execute(
+                        "SELECT attempts FROM engagement_outbox "
+                        "WHERE event_id=?",
+                        (str(event_id),),
+                    ).fetchone()
+                    if row is None:
+                        continue
+                    attempts = max(0, int(row["attempts"]))
+                    delay_seconds = min(
+                        60 * (2 ** min(attempts, 4)),
+                        15 * 60,
+                    )
+                    next_attempt = _utc_z_at(
+                        attempted_at + timedelta(seconds=delay_seconds)
+                    )
+                    self.connection.execute(
+                        "UPDATE engagement_outbox "
+                        "SET attempts=attempts+1, last_error_code=?, "
+                        "updated_at=?, next_attempt_at=? "
+                        "WHERE event_id=?",
+                        (
+                            str(error_code),
+                            attempted_text,
+                            next_attempt,
+                            str(event_id),
+                        ),
+                    )
+                self.connection.commit()
+            except Exception:
+                self.connection.rollback()
+                raise
 
     def record_engagement_rejections(
         self,

@@ -72,6 +72,8 @@ def check_packaged_data() -> Check:
                 "migrations", "0001_initial.sql"),
             "engagement migration": root.joinpath(
                 "migrations", "0002_engagement_outbox.sql"),
+            "engagement retry migration": root.joinpath(
+                "migrations", "0003_engagement_next_attempt.sql"),
             "Voice DNA": root.joinpath(
                 "_data", "voice_dna", "VOICE-DNA.md"),
             "editor": root.joinpath("_data", "ui", "index.html"),
