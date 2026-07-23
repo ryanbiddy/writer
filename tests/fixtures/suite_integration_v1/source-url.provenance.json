@@ -1,0 +1,8 @@
+{
+  "repository": "ryanbiddy/zing",
+  "commit": "0bddbc8a7ba9e13a84f025fc6c33f260ca25d4fb",
+  "fixture": "tools/eval/fixtures/suite_v1/source-url.json",
+  "git_blob_sha": "1592c5dc4f2b3bd7e113abf2912180fbe1a951e0",
+  "fixture_sha256": "3C3628558AE830A2D41631FF1D7F48E54C4E588C7BBF6B533DD9F5835E834063",
+  "copy_note": "The local copy is byte-for-byte identical to the pinned Zing blob."
+}

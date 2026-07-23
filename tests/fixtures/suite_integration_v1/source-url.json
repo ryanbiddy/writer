@@ -1,0 +1,86 @@
+{
+  "fixture": "ryan.suite.source-url-conformance",
+  "version": 1,
+  "cases": [
+    {
+      "id": "http",
+      "value": "http://host.example/video",
+      "expected_valid": true
+    },
+    {
+      "id": "https_query_fragment",
+      "value": "https://host.example/video?q=1#part",
+      "expected_valid": true
+    },
+    {
+      "id": "explicit_port",
+      "value": "http://host.example:8080/video",
+      "expected_valid": true
+    },
+    {
+      "id": "ipv6_loopback",
+      "value": "http://[::1]:61234/video",
+      "expected_valid": true
+    },
+    {
+      "id": "empty",
+      "value": "",
+      "expected_valid": false
+    },
+    {
+      "id": "network_path",
+      "value": "//attacker.example/video",
+      "expected_valid": false
+    },
+    {
+      "id": "missing_host",
+      "value": "https://",
+      "expected_valid": false
+    },
+    {
+      "id": "triple_slash",
+      "value": "https:///missing-host",
+      "expected_valid": false
+    },
+    {
+      "id": "whitespace",
+      "value": "https://host.example/bad path",
+      "expected_valid": false
+    },
+    {
+      "id": "backslash",
+      "value": "http://host.example\\..\\secret",
+      "expected_valid": false
+    },
+    {
+      "id": "file_scheme",
+      "value": "file:///tmp/video.mp4",
+      "expected_valid": false
+    },
+    {
+      "id": "ftp_scheme",
+      "value": "ftp://host.example/video.mp4",
+      "expected_valid": false
+    },
+    {
+      "id": "nonnumeric_port",
+      "value": "https://host.example:abc/video",
+      "expected_valid": false
+    },
+    {
+      "id": "out_of_range_port",
+      "value": "https://host.example:65536/video",
+      "expected_valid": false
+    },
+    {
+      "id": "malformed_ipv6",
+      "value": "http://[::1/video",
+      "expected_valid": false
+    },
+    {
+      "id": "userinfo_credentials",
+      "value": "https://user:secret@host.example/video",
+      "expected_valid": false
+    }
+  ]
+}
