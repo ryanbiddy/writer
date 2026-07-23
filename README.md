@@ -5,7 +5,7 @@ user's voice. Start from a blank page or attach a bounded source snapshot from
 Uoink. Manual editing, save, Voice DNA scan, critique history, and file export
 work when Uoink and Zing are stopped.
 
-This repository is private migration work. It has not been released or
+The source repository is public. The package has not been released or
 distributed.
 
 ## Run locally
