@@ -262,8 +262,8 @@ def test_ui_is_standalone_and_honest(writer_http):
             f"http://127.0.0.1:{writer_http}/", timeout=3) as response:
         text = response.read().decode("utf-8")
     assert response.status == 200
-    assert "<title>Writer</title>" in text
+    assert "<title>Recount</title>" in text
     assert "Save draft" in text
     assert "Attach Uoink source" in text
-    assert "Connect an AI through Writer's MCP server" in text
+    assert "Connect an AI through Recount's MCP server" in text
     assert "publish" not in text.casefold()

@@ -1,12 +1,18 @@
-# Writer
+# Recount
 
-Writer is a local-first drafting product for prose and video scripts in the
+Recount is a local-first drafting product for prose and video scripts in the
 user's voice. Start from a blank page or attach a bounded source snapshot from
 Uoink. Manual editing, save, Voice DNA scan, critique history, and file export
 work when Uoink and Zing are stopped.
 
-This repository is private migration work. It has not been released or
-distributed.
+This is a candidate display-name change, not a technical rename. The installed
+package, Python module, CLI, data locations, environment variables, MCP and
+HTTP identities, and cross-product contracts remain `writer` / `Writer` until
+Ryan confirms the final name and the suite contract is re-ratified. See
+[the rename plan](docs/RECOUNT-RENAME-PLAN.md).
+
+This repository contains pre-release migration work. Recount has not been
+released or distributed.
 
 ## Run locally
 
@@ -21,7 +27,8 @@ credential file, or `WRITER_TOKEN` when explicitly configured), but never
 prints the credential or places it in a URL. Open the editor, copy the value
 from that source, and paste it into the editor's Credential field.
 
-Connect an AI directly to Writer's MCP server:
+Connect an AI directly to Recount's MCP server through the existing `writer`
+command:
 
 ```powershell
 writer serve-mcp --print-config
@@ -29,12 +36,12 @@ writer serve-mcp
 ```
 
 The MCP flow is two-phase. Call `prepare_draft` or `prepare_script`, write with
-the AI client already in use, then call `save_piece` or `save_script`. Writer
+the AI client already in use, then call `save_piece` or `save_script`. Recount
 does not choose a hidden provider.
 
 ## Optional Uoink sources
 
-Set these only when Writer should read the local Uoink corpus:
+Set these only when Recount should read the local Uoink corpus:
 
 ```powershell
 $env:WRITER_UOINK_URL = "http://127.0.0.1:5179"
@@ -42,22 +49,22 @@ $env:WRITER_UOINK_TOKEN = "<Uoink local token>"
 writer serve
 ```
 
-Writer accepts only the versioned `uoink.corpus.read` v1 contract. It never
+Recount accepts only the versioned `uoink.corpus.read` v1 contract. It never
 opens Uoink's database or token file. Saved source snapshots contain an opaque
 `uoink://item/<id>` reference plus bounded display and credit fields, so a
 draft reopens without Uoink. A snapshot source URL is either null or an
-absolute HTTP(S) URL; Writer rejects file URLs, filesystem paths, and other
+absolute HTTP(S) URL; Recount rejects file URLs, filesystem paths, and other
 schemes at both the Uoink response boundary and its own storage schema.
 
 ## Ownership
 
-- Writer owns drafts, prose versions, scripts, critiques, voice samples, Voice
+- Recount owns drafts, prose versions, scripts, critiques, voice samples, Voice
   DNA, and shot-list files.
 - Uoink owns capture, corpus search, facets, taste, engagement, and assembly
   ranking.
 - Zing receives a versioned Markdown shot list only when the user chooses an
-  output file. Writer makes no live Zing call.
-- Writer has no account, scheduling, delivery, or social action surface.
+  output file. Recount makes no live Zing call.
+- Recount has no account, scheduling, delivery, or social action surface.
 
 ## Development gate
 
