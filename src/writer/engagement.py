@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Any
+import threading
+from datetime import datetime, timezone
+from typing import Any, Callable
 
 from writer.uoink_client import UoinkContractError, UoinkUnavailable
 
@@ -29,20 +31,79 @@ def _receipt(
 class EngagementDelivery:
     """Attempt one bounded batch; keep every uncertain event in Writer."""
 
-    def __init__(self, store, uoink=None):
+    def __init__(
+        self,
+        store,
+        uoink=None,
+        *,
+        clock: Callable[[], datetime] | None = None,
+    ):
         self.store = store
         self.uoink = uoink
+        self.clock = clock or (lambda: datetime.now(timezone.utc))
+        self._delivery_lock = threading.RLock()
 
     def deliver_entity(
         self,
         entity_kind: str,
         entity_id: int,
     ) -> dict[str, Any]:
-        rows = self.store.pending_engagement(
-            entity_kind=entity_kind,
-            entity_id=entity_id,
-            limit=100,
-        )
+        """Deliver the newly saved entity, then one older due batch."""
+        with self._delivery_lock:
+            attempted_at = self.clock()
+            if self.uoink is None:
+                rows = self.store.pending_engagement(
+                    entity_kind=entity_kind,
+                    entity_id=entity_id,
+                    limit=100,
+                )
+            else:
+                rows = self.store.claim_engagement(
+                    entity_kind=entity_kind,
+                    entity_id=entity_id,
+                    limit=100,
+                    claimed_at=attempted_at,
+                )
+            receipt = self._deliver_rows(rows, attempted_at=attempted_at)
+            if receipt["state"] != "spooled":
+                self._deliver_pending_locked(
+                    limit=25,
+                    attempted_at=attempted_at,
+                )
+            return receipt
+
+    def deliver_pending(self, *, limit: int = 25) -> dict[str, Any]:
+        """Attempt one due global batch, serialized within this process."""
+        with self._delivery_lock:
+            return self._deliver_pending_locked(
+                limit=limit,
+                attempted_at=self.clock(),
+            )
+
+    def _deliver_pending_locked(
+        self,
+        *,
+        limit: int,
+        attempted_at: datetime,
+    ) -> dict[str, Any]:
+        if self.uoink is None:
+            rows = self.store.pending_engagement(
+                limit=limit,
+                due_at=attempted_at,
+            )
+        else:
+            rows = self.store.claim_engagement(
+                limit=limit,
+                claimed_at=attempted_at,
+            )
+        return self._deliver_rows(rows, attempted_at=attempted_at)
+
+    def _deliver_rows(
+        self,
+        rows: list[dict[str, Any]],
+        *,
+        attempted_at: datetime,
+    ) -> dict[str, Any]:
         submitted = len(rows)
         if not rows:
             return _receipt("not_applicable", submitted=0)
@@ -62,6 +123,7 @@ class EngagementDelivery:
                 self.store.mark_engagement_attempt(
                     event_ids,
                     error.code,
+                    attempted_at=attempted_at,
                 )
                 return _receipt(
                     "spooled",
@@ -87,6 +149,7 @@ class EngagementDelivery:
             self.store.mark_engagement_attempt(
                 event_ids,
                 getattr(error, "code", "unavailable"),
+                attempted_at=attempted_at,
             )
             return _receipt(
                 "spooled",
@@ -115,6 +178,7 @@ class EngagementDelivery:
             self.store.mark_engagement_attempt(
                 [item["event_id"] for item in retryable],
                 retryable[0]["code"],
+                attempted_at=attempted_at,
             )
         spooled = len(retryable)
         rejected_count = len(permanent)

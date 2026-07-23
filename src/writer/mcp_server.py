@@ -314,6 +314,7 @@ class WriterTools:
         )
 
     def writer_status(self) -> dict[str, Any]:
+        self.engagement.deliver_pending()
         return _ok(
             service="writer",
             schema_version=1,
@@ -341,8 +342,12 @@ def _optional_uoink() -> UoinkClient | None:
 def build_server(tools: WriterTools | None = None):
     from mcp.server.fastmcp import FastMCP
 
-    active = tools or WriterTools(
-        WriterStore.open(), uoink=_optional_uoink())
+    if tools is None:
+        active = WriterTools(
+            WriterStore.open(), uoink=_optional_uoink())
+        active.engagement.deliver_pending()
+    else:
+        active = tools
     mcp = FastMCP(
         "writer",
         instructions=(
