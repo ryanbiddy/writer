@@ -497,9 +497,21 @@ def _print_config() -> int:
     return 0
 
 
+_USAGE = "usage: writer serve-mcp [--print-config]"
+
+
 def run(argv: list[str]) -> int:
-    if "--print-config" in argv:
+    if argv in (["-h"], ["--help"]):
+        print(_USAGE)
+        return 0
+    if argv == ["--print-config"]:
         return _print_config()
+    if argv:
+        print(
+            f"unknown argument {argv[0]!r}\n{_USAGE}",
+            file=sys.stderr,
+        )
+        return 2
     try:
         import mcp  # noqa: F401
     except ImportError:
