@@ -5,6 +5,7 @@ import asyncio
 import pytest
 
 from writer import __version__
+from writer import mcp_server
 from writer.mcp_server import TOOL_NAMES, WriterTools, build_server
 from writer.storage import WriterStore
 
@@ -28,6 +29,25 @@ EXPECTED_TOOLS = {
     "scan_voice",
     "writer_status",
 }
+
+
+def test_mcp_cli_help_and_unknown_flags_never_start_the_server(
+    monkeypatch, capsys
+):
+    def unexpected_server():
+        pytest.fail("help or an invalid flag must not start blocking stdio")
+
+    monkeypatch.setattr(mcp_server, "build_server", unexpected_server)
+
+    assert mcp_server.run(["--help"]) == 0
+    help_output = capsys.readouterr()
+    assert "usage: writer serve-mcp [--print-config]" in help_output.out
+    assert help_output.err == ""
+
+    assert mcp_server.run(["--unknown"]) == 2
+    error_output = capsys.readouterr()
+    assert "unknown argument '--unknown'" in error_output.err
+    assert "usage: writer serve-mcp [--print-config]" in error_output.err
 
 
 def test_mcp_surface_is_product_owned_and_complete():
