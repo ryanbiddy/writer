@@ -157,6 +157,32 @@ def test_script_and_shot_list_document_round_trip():
     assert payload["shots"][0]["scene"] == 1
 
 
+@pytest.mark.parametrize(
+    ("beat", "message"),
+    [
+        (Beat(123, "proof"), "beat.label"),
+        (Beat("proof", []), "beat.content"),
+        (Beat("proof", "show it", None), "beat.timecode"),
+    ],
+)
+def test_beat_contract_rejects_non_string_fields(beat, message):
+    with pytest.raises(SchemaError, match=message):
+        beat.validate()
+
+
+@pytest.mark.parametrize(
+    ("shot", "message"),
+    [
+        (Shot(True, "proof"), "shot.scene"),
+        (Shot(1, "proof", "wide"), "shot.cues"),
+        (Shot(1, "proof", ["wide"], []), "shot.notes"),
+    ],
+)
+def test_shot_contract_rejects_json_type_lookalikes(shot, message):
+    with pytest.raises(SchemaError, match=message):
+        shot.validate()
+
+
 def test_initial_migration_owns_no_uoink_tables():
     sql = (
         ROOT / "src" / "writer" / "migrations" / "0001_initial.sql"
