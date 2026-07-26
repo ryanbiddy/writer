@@ -60,6 +60,27 @@ def _err(message: str) -> dict[str, Any]:
     return {"ok": False, "error": str(message)}
 
 
+def _positive_integer(value: Any, field: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise ValueError(f"{field} must be a positive integer")
+    return value
+
+
+def _list_limit(value: Any) -> int:
+    if (
+            isinstance(value, bool)
+            or not isinstance(value, int)
+            or not 1 <= value <= 500):
+        raise ValueError("limit must be an integer between 1 and 500")
+    return value
+
+
+def _boolean(value: Any, field: str) -> bool:
+    if not isinstance(value, bool):
+        raise ValueError(f"{field} must be a boolean")
+    return value
+
+
 def _source_list(value: Any) -> list[SourceSnapshot]:
     if value is None:
         return []
@@ -163,9 +184,10 @@ class WriterTools:
 
     def get_draft(self, draft_id: int) -> dict[str, Any]:
         def work() -> dict[str, Any]:
-            draft = self.store.get_draft(draft_id)
+            key = _positive_integer(draft_id, "draft_id")
+            draft = self.store.get_draft(key)
             if draft is None:
-                return _err(f"draft not found: {draft_id}")
+                return _err(f"draft not found: {key}")
             return _ok(draft=draft.to_dict())
         return self._call(work)
 
@@ -183,11 +205,14 @@ class WriterTools:
 
     def list_pieces(
             self, kind: str = "", limit: int = 100) -> dict[str, Any]:
-        return self._call(lambda: _ok(pieces=[
-            piece.to_dict()
-            for piece in self.store.list_pieces(
-                kind=kind or None, limit=limit)
-        ]))
+        def work() -> dict[str, Any]:
+            count = _list_limit(limit)
+            return _ok(pieces=[
+                piece.to_dict()
+                for piece in self.store.list_pieces(
+                    kind=kind or None, limit=count)
+            ])
+        return self._call(work)
 
     def prepare_script(
             self, brief: str,
@@ -225,13 +250,14 @@ class WriterTools:
             focus: str = "",
             draft_text: str = "") -> dict[str, Any]:
         def work() -> dict[str, Any]:
+            key = _positive_integer(script_id, "script_id")
             if findings is None:
                 prompt = self.scripts.prepare_critique(
-                    script_id, focus=focus)
+                    key, focus=focus)
                 return _ok(
                     mode="context_only", prompt=prompt.to_dict())
             critique = self.scripts.save_critique(
-                script_id,
+                key,
                 findings=findings,
                 draft_text=draft_text or None,
             )
@@ -245,16 +271,21 @@ class WriterTools:
             critique_id: int | None = None,
             instructions: str = "") -> dict[str, Any]:
         def work() -> dict[str, Any]:
+            key = _positive_integer(script_id, "script_id")
+            critique_key = (
+                _positive_integer(critique_id, "critique_id")
+                if critique_id is not None else None
+            )
             if revised_script is None:
                 prompt = self.scripts.prepare_revision(
-                    script_id,
-                    critique_id=critique_id,
+                    key,
+                    critique_id=critique_key,
                     instructions=instructions,
                 )
                 return _ok(
                     mode="context_only", prompt=prompt.to_dict())
             payload = dict(revised_script)
-            payload["parent_id"] = script_id
+            payload["parent_id"] = key
             saved = self.save_script(payload)
             if not saved.get("ok"):
                 return saved
@@ -267,7 +298,8 @@ class WriterTools:
 
     def derive_shot_list(self, script_id: int) -> dict[str, Any]:
         def work() -> dict[str, Any]:
-            saved = self.scripts.derive_shots(script_id)
+            key = _positive_integer(script_id, "script_id")
+            saved = self.scripts.derive_shots(key)
             return _ok(
                 script=saved.to_dict(),
                 engagement=self.engagement.deliver_entity(
@@ -278,11 +310,14 @@ class WriterTools:
     def export_shot_list(
             self, script_id: int, output: str,
             title: str = "") -> dict[str, Any]:
-        return self._call(lambda: _ok(
-            document=self.scripts.export_shot_list(
-                script_id, output, title=title).to_dict(),
-            output=str(Path(output).expanduser()),
-        ))
+        def work() -> dict[str, Any]:
+            key = _positive_integer(script_id, "script_id")
+            return _ok(
+                document=self.scripts.export_shot_list(
+                    key, output, title=title).to_dict(),
+                output=str(Path(output).expanduser()),
+            )
+        return self._call(work)
 
     def add_voice_sample(
             self, sample: dict[str, Any]) -> dict[str, Any]:
@@ -292,19 +327,23 @@ class WriterTools:
 
     def list_voice_samples(
             self, active_only: bool = False) -> dict[str, Any]:
-        return self._call(lambda: _ok(voice_samples=[
-            sample.to_dict()
-            for sample in self.store.list_voice_samples(
-                active_only=active_only)
-        ]))
+        def work() -> dict[str, Any]:
+            active = _boolean(active_only, "active_only")
+            return _ok(voice_samples=[
+                sample.to_dict()
+                for sample in self.store.list_voice_samples(
+                    active_only=active)
+            ])
+        return self._call(work)
 
     def remove_voice_sample(self, sample_id: int) -> dict[str, Any]:
         def work() -> dict[str, Any]:
-            removed = self.store.remove_voice_sample(sample_id)
+            key = _positive_integer(sample_id, "sample_id")
+            removed = self.store.remove_voice_sample(key)
             if not removed:
                 return _err(
-                    f"voice sample not found: {sample_id}")
-            return _ok(removed=True, id=sample_id)
+                    f"voice sample not found: {key}")
+            return _ok(removed=True, id=key)
         return self._call(work)
 
     def scan_voice(self, text: str) -> dict[str, Any]:
@@ -339,7 +378,10 @@ def _optional_uoink() -> UoinkClient | None:
 
 
 def build_server(tools: WriterTools | None = None):
+    import inspect
+
     from mcp.server.fastmcp import FastMCP
+    from pydantic import StrictBool, StrictInt
 
     active = tools or WriterTools(
         WriterStore.open(), uoink=_optional_uoink())
@@ -393,8 +435,50 @@ def build_server(tools: WriterTools | None = None):
         "writer_status": (
             "Read path-free Writer health, optional peer state, and counts."),
     }
+    strict_parameters = {
+        "prepare_draft": {
+            "voice_sample_ids": list[StrictInt] | None,
+            "target_length": StrictInt | None,
+        },
+        "get_draft": {"draft_id": StrictInt},
+        "list_pieces": {"limit": StrictInt},
+        "critique_script": {"script_id": StrictInt},
+        "revise_script": {
+            "script_id": StrictInt,
+            "critique_id": StrictInt | None,
+        },
+        "derive_shot_list": {"script_id": StrictInt},
+        "export_shot_list": {"script_id": StrictInt},
+        "list_voice_samples": {"active_only": StrictBool},
+        "remove_voice_sample": {"sample_id": StrictInt},
+    }
+
+    def strict_tool(function, annotations):
+        """Clone one bound handler signature with stricter MCP-only types."""
+        def wrapper(*args, **kwargs):
+            return function(*args, **kwargs)
+
+        wrapper.__name__ = function.__name__
+        wrapper.__doc__ = function.__doc__
+        signature = inspect.signature(function)
+        wrapper.__signature__ = signature.replace(parameters=[
+            parameter.replace(
+                annotation=annotations.get(
+                    parameter.name, parameter.annotation))
+            for parameter in signature.parameters.values()
+        ])
+        wrapper.__annotations__ = dict(function.__annotations__)
+        wrapper.__annotations__.update(annotations)
+        return wrapper
+
     for name in TOOL_NAMES:
         function = getattr(active, name)
+        if name in strict_parameters:
+            # FastMCP's default integer/Boolean validators coerce JSON strings
+            # and booleans before SDK-free handlers can distinguish the
+            # caller's real types. Preserve the same public JSON schema while
+            # enforcing it at the optional MCP boundary.
+            function = strict_tool(function, strict_parameters[name])
         mcp.tool(name=name, description=descriptions[name])(function)
     return mcp
 
