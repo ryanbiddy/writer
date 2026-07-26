@@ -340,6 +340,7 @@ def _optional_uoink() -> UoinkClient | None:
 
 def build_server(tools: WriterTools | None = None):
     from mcp.server.fastmcp import FastMCP
+    from pydantic import StrictBool
 
     active = tools or WriterTools(
         WriterStore.open(), uoink=_optional_uoink())
@@ -393,8 +394,30 @@ def build_server(tools: WriterTools | None = None):
         "writer_status": (
             "Read path-free Writer health, optional peer state, and counts."),
     }
+
+    def strict_validate_composition(
+            kind: str, blocks: list[str],
+            credit_lines: list[str] | None = None,
+            attribution_enabled=True) -> dict[str, Any]:
+        return active.validate_composition(
+            kind=kind,
+            blocks=blocks,
+            credit_lines=credit_lines,
+            attribution_enabled=attribution_enabled,
+        )
+
+    # FastMCP's default bool validator coerces JSON strings and integers.
+    # Replace only this annotation at the optional MCP boundary; the
+    # standard-library handler and HTTP boundary still validate themselves.
+    strict_validate_composition.__annotations__[
+        "attribution_enabled"] = StrictBool
+
     for name in TOOL_NAMES:
-        function = getattr(active, name)
+        function = (
+            strict_validate_composition
+            if name == "validate_composition"
+            else getattr(active, name)
+        )
         mcp.tool(name=name, description=descriptions[name])(function)
     return mcp
 
