@@ -371,6 +371,12 @@ class ScriptContract(JsonContract):
 
     def validate(self) -> "ScriptContract":
         _version(self.schema_version, "script")
+        if self.parent_id is not None and (
+                isinstance(self.parent_id, bool)
+                or not isinstance(self.parent_id, int)
+                or self.parent_id < 1):
+            raise SchemaError(
+                "script.parent_id must be null or a positive integer")
         if not self.hook.strip():
             raise SchemaError("script.hook is required")
         if self.target_length_sec is not None and (
