@@ -115,8 +115,10 @@ class SourceSnapshot(JsonContract):
                 or not encoded_id
                 or invalid_percent
                 or "/" in encoded_id
+                or len(item_id) > 200
                 or "/" in item_id
                 or "\\" in item_id
+                or urllib.parse.quote(item_id, safe="") != encoded_id
                 or parsed.params
                 or parsed.query
                 or parsed.fragment
