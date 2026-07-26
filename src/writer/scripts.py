@@ -285,6 +285,10 @@ class ScriptService:
         script = self.store.get_script(script_id)
         if script is None:
             raise ValueError(f"script not found: {script_id}")
+        if not script.beats:
+            raise ValueError(
+                "script has no beats; add at least one beat before "
+                "deriving shots")
         cues = FORMAT_DEFAULTS.get(
             script.format, ["wide", "close-up", "b-roll"])
         shots = [
