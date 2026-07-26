@@ -175,6 +175,10 @@ class DraftContract(JsonContract):
                 "draft.id must be null or a positive integer")
         if not isinstance(self.body, str):
             raise SchemaError("draft.body must be a string")
+        for field_name in ("title", "brief", "created_at", "updated_at"):
+            if not isinstance(getattr(self, field_name), str):
+                raise SchemaError(
+                    f"draft.{field_name} must be a string")
         for source in self.sources:
             source.validate()
         if any(
