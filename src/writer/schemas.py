@@ -40,8 +40,11 @@ class JsonContract:
             self.to_dict(), ensure_ascii=False, **kwargs)
 
 
-def _version(value: int, label: str) -> None:
-    if value != SCHEMA_VERSION:
+def _version(value: Any, label: str) -> None:
+    if (
+            isinstance(value, bool)
+            or not isinstance(value, int)
+            or value != SCHEMA_VERSION):
         raise SchemaError(
             f"{label}.schema_version must be {SCHEMA_VERSION}")
 
@@ -96,6 +99,9 @@ class SourceSnapshot(JsonContract):
 
     def validate(self) -> "SourceSnapshot":
         _version(self.schema_version, "source")
+        if not isinstance(self.credit_required, bool):
+            raise SchemaError(
+                "source.credit_required must be a boolean")
         if self.provider not in SOURCE_PROVIDERS:
             raise SchemaError(
                 "source.provider must be one of "
@@ -523,6 +529,10 @@ class VoiceSampleContract(JsonContract):
 
     def validate(self) -> "VoiceSampleContract":
         _version(self.schema_version, "voice-sample")
+        for field_name in ("active", "default"):
+            if not isinstance(getattr(self, field_name), bool):
+                raise SchemaError(
+                    f"voice-sample.{field_name} must be a boolean")
         if not self.name.strip():
             raise SchemaError("voice-sample.name is required")
         if self.source_type not in self.SOURCE_TYPES:
