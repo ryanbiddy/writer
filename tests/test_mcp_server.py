@@ -153,6 +153,65 @@ def test_nested_payload_errors_remain_tool_data(tmp_path, method, payload):
         store.close()
 
 
+@pytest.mark.parametrize(
+    ("script", "error"),
+    [
+        (
+            {
+                "hook": "Hook.",
+                "beats": [{"label": 123, "content": []}],
+            },
+            "beat.label must be a string",
+        ),
+        (
+            {
+                "hook": "Hook.",
+                "shots": [{
+                    "scene": True,
+                    "label": "proof",
+                    "cues": ["wide"],
+                }],
+            },
+            "shot.scene must be positive",
+        ),
+        (
+            {
+                "hook": "Hook.",
+                "shots": [{
+                    "scene": 1,
+                    "label": "proof",
+                    "cues": "wide",
+                }],
+            },
+            "shot.cues must be a list of strings",
+        ),
+        (
+            {
+                "hook": "Hook.",
+                "shots": [{
+                    "scene": 1,
+                    "label": "proof",
+                    "cues": ["wide"],
+                    "notes": [],
+                }],
+            },
+            "shot.notes must be a string",
+        ),
+    ],
+)
+def test_malformed_nested_script_fields_are_not_persisted(
+        tmp_path, script, error):
+    store = WriterStore.open(tmp_path / "writer.db")
+    try:
+        result = WriterTools(store).save_script(script)
+
+        assert result["ok"] is False
+        assert result["error"] == error
+        assert store.list_scripts() == []
+    finally:
+        store.close()
+
+
 def test_writer_status_counts_every_record_beyond_list_page_cap(tmp_path):
     store = WriterStore.open(tmp_path / "writer.db")
     try:
