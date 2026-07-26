@@ -318,4 +318,7 @@ def test_ui_is_standalone_and_honest(writer_http):
     assert "Save draft" in text
     assert "Attach Uoink source" in text
     assert "Connect an AI through Writer's MCP server" in text
+    assert 'id="script-beats"' in text
+    assert "const beats=scriptBeats()" in text
+    assert 'format:$("format").value,beats,body:' in text
     assert "publish" not in text.casefold()

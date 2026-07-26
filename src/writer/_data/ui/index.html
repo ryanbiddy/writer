@@ -42,6 +42,7 @@
       <h2>Script</h2>
       <label>Hook<input id="hook"></label>
       <label>Format<input id="format" value="talking_head"></label>
+      <label>Beats (one per line)<textarea id="script-beats" placeholder="Show the setup&#10;Demonstrate the proof"></textarea></label>
       <label>Body<textarea id="script-body"></textarea></label>
       <label>CTA<input id="cta"></label>
       <button id="save-script">Save script</button>
@@ -75,10 +76,11 @@
       const data=await response.json();if(!data.ok)throw new Error(data.error?.message||"Request failed");return data.data
     }
     function note(text){$("status").textContent=text}
+    function scriptBeats(){return $("script-beats").value.split(/\r?\n/).map(line=>line.trim()).filter(Boolean).map((content,index)=>({label:"Beat "+(index+1),content}))}
     $("attach").onclick=async()=>{try{const data=await api("/sources/uoink",{item_id:$("uoink-id").value});sources.push(data.source);$("sources").textContent=sources.map(x=>x.title||x.provider_ref).join(", ");note("Source attached. Your draft text was not changed.")}catch(e){note(e.message)}};
     $("prepare").onclick=async()=>{try{const data=await api("/prepare",{kind:$("kind").value,brief:$("brief").value,draft_text:$("draft").value,sources});$("prompt").textContent=JSON.stringify(data.prompt,null,2);note("Context prepared. No model was called.")}catch(e){note(e.message)}};
     $("save-draft").onclick=async()=>{try{const data=await api("/drafts",{kind:$("kind").value,title:$("title").value,body:$("draft").value,sources});note("Draft saved locally as #"+data.draft.id)}catch(e){note(e.message)}};
-    $("save-script").onclick=async()=>{try{const data=await api("/scripts",{hook:$("hook").value,format:$("format").value,body:$("script-body").value,cta:$("cta").value,sources});scriptId=data.script.id;note("Script saved locally as #"+scriptId)}catch(e){note(e.message)}};
+    $("save-script").onclick=async()=>{try{const beats=scriptBeats();const data=await api("/scripts",{hook:$("hook").value,format:$("format").value,beats,body:$("script-body").value,cta:$("cta").value,sources});scriptId=data.script.id;note("Script saved locally as #"+scriptId)}catch(e){note(e.message)}};
     $("export-script").onclick=async()=>{try{if(!scriptId)throw new Error("Save the script first.");const derived=await api("/scripts/"+scriptId+"/derive-shots",{});scriptId=derived.script.id;await api("/scripts/"+scriptId+"/export",{output:$("shot-output").value});note("Versioned shot-list file saved.")}catch(e){note(e.message)}};
     $("scan").onclick=async()=>{try{const data=await api("/voice/scan",{text:$("voice-text").value});$("warnings").textContent=JSON.stringify(data.warnings,null,2);note("Voice scan finished locally. No model was called.")}catch(e){note(e.message)}};
   </script>
