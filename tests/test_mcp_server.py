@@ -352,6 +352,39 @@ def test_malformed_nested_script_fields_are_not_persisted(
         store.close()
 
 
+@pytest.mark.parametrize(
+    "provider_ref",
+    (
+        "uoink://item/a b",
+        "uoink://item/%41",
+        "uoink://item/%e2%9c%93",
+        "uoink://item/" + "a" * 201,
+    ),
+)
+def test_save_draft_rejects_alias_uoink_refs_without_persistence(
+    tmp_path, provider_ref
+):
+    store = WriterStore.open(tmp_path / "writer.db")
+    try:
+        result = WriterTools(store).save_draft({
+            "kind": "blog",
+            "body": "Body.",
+            "sources": [{
+                "provider": "uoink",
+                "provider_ref": provider_ref,
+            }],
+        })
+
+        assert result["ok"] is False
+        assert "identify one uoink://item/<id>" in result["error"]
+        assert store.connection.execute(
+            "SELECT COUNT(*) FROM drafts").fetchone()[0] == 0
+        assert store.connection.execute(
+            "SELECT COUNT(*) FROM engagement_outbox").fetchone()[0] == 0
+    finally:
+        store.close()
+
+
 def test_writer_status_counts_every_record_beyond_list_page_cap(tmp_path):
     store = WriterStore.open(tmp_path / "writer.db")
     try:
