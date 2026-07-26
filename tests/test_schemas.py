@@ -97,6 +97,10 @@ def test_source_url_must_be_null_or_http(source_url):
         "uoink://item/one%2Ftwo",
         "uoink://item/bad%ZZ",
         "uoink://item/one?path=two",
+        "uoink://item/a b",
+        "uoink://item/%41",
+        "uoink://item/%e2%9c%93",
+        "uoink://item/" + "a" * 201,
         "file:///private/item",
     ),
 )
@@ -106,6 +110,15 @@ def test_uoink_reference_identifies_one_stable_item(provider_ref):
             provider="uoink",
             provider_ref=provider_ref,
         ).validate()
+
+
+def test_uoink_reference_accepts_canonical_percent_encoding():
+    source = SourceSnapshot(
+        provider="uoink",
+        provider_ref="uoink://item/a%20b",
+    ).validate()
+
+    assert source.provider_ref == "uoink://item/a%20b"
 
 
 def test_piece_retains_every_required_credit():
