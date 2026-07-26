@@ -464,6 +464,7 @@ def create_server(
         raise ValueError("Writer local credential is required")
     store = WriterStore.open(database)
     tools = WriterTools(store, uoink=uoink)
+    tools.engagement.deliver_pending()
 
     class BoundWriterHandler(WriterHandler):
         pass
