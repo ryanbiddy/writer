@@ -188,3 +188,20 @@ def test_derive_shots_and_versioned_file_handoff_work_without_zing(
         assert Path(output).is_file()
     finally:
         store.close()
+
+
+def test_derive_shots_rejects_a_script_without_beats(tmp_path):
+    store = WriterStore.open(tmp_path / "writer.db")
+    try:
+        service = ScriptService(store)
+        script = service.save_script(
+            hook="An empty plan must not look derived.",
+            body="The body exists, but no editorial beats were saved.",
+        )
+
+        with pytest.raises(ValueError, match="script has no beats"):
+            service.derive_shots(script.id)
+
+        assert [saved.id for saved in store.list_scripts()] == [script.id]
+    finally:
+        store.close()
