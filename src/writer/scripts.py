@@ -172,6 +172,12 @@ class ScriptService:
             sources: list[SourceSnapshot] | None = None,
             assembly_query: AssemblyQuery | None = None,
             parent_id: int | None = None) -> ScriptContract:
+        if parent_id is not None and (
+                isinstance(parent_id, bool)
+                or not isinstance(parent_id, int)
+                or parent_id < 1):
+            raise ValueError(
+                "script.parent_id must be null or a positive integer")
         parent = None
         if parent_id is not None:
             parent = self.store.get_script(parent_id)
