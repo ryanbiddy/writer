@@ -430,6 +430,10 @@ class ScriptContract(JsonContract):
                 or self.parent_id < 1):
             raise SchemaError(
                 "script.parent_id must be null or a positive integer")
+        for field_name in ("hook", "format", "body", "cta"):
+            if not isinstance(getattr(self, field_name), str):
+                raise SchemaError(
+                    f"script.{field_name} must be a string")
         if not self.hook.strip():
             raise SchemaError("script.hook is required")
         if self.target_length_sec is not None and (

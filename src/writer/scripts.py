@@ -178,6 +178,12 @@ class ScriptService:
                 or parent_id < 1):
             raise ValueError(
                 "script.parent_id must be null or a positive integer")
+        if not isinstance(hook, str):
+            raise ValueError("script.hook must be a string")
+        for field, value in (
+                ("format", format), ("body", body), ("cta", cta)):
+            if value is not None and not isinstance(value, str):
+                raise ValueError(f"script.{field} must be a string or null")
         parent = None
         if parent_id is not None:
             parent = self.store.get_script(parent_id)
