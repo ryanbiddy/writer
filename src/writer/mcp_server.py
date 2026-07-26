@@ -442,6 +442,7 @@ def build_server(tools: WriterTools | None = None):
         },
         "get_draft": {"draft_id": StrictInt},
         "list_pieces": {"limit": StrictInt},
+        "validate_composition": {"attribution_enabled": StrictBool},
         "critique_script": {"script_id": StrictInt},
         "revise_script": {
             "script_id": StrictInt,
