@@ -234,6 +234,12 @@ class PieceContract(JsonContract):
     def validate(self) -> "PieceContract":
         _version(self.schema_version, "piece")
         _kind(self.kind)
+        if self.parent_id is not None and (
+                isinstance(self.parent_id, bool)
+                or not isinstance(self.parent_id, int)
+                or self.parent_id < 1):
+            raise SchemaError(
+                "piece.parent_id must be null or a positive integer")
         if self.kind == "script":
             raise SchemaError(
                 "script output must use ScriptContract")
