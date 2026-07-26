@@ -5,13 +5,24 @@ user's voice. Start from a blank page or attach a bounded source snapshot from
 Uoink. Manual editing, save, Voice DNA scan, critique history, and file export
 work when Uoink and Zing are stopped.
 
-The source repository is public. The package has not been released or
-distributed.
+The source repository is public. A
+[public v0.1.0.dev0 pre-release](https://github.com/ryanbiddy/writer/releases/tag/v0.1.0.dev0)
+is available for hands-on testing; the package is not on PyPI.
 
 ## Run locally
 
 ```powershell
-python -m pip install -e .[dev]
+python -m pip install -e ".[dev]"
+writer serve
+```
+
+To use the pre-release wheel instead, download it from the release page and
+install the MCP extra:
+
+```powershell
+python -m pip install ".\ryan_writer-0.1.0.dev0-py3-none-any.whl[mcp]"
+writer --version
+writer doctor
 writer serve
 ```
 

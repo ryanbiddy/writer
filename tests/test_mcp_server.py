@@ -3,9 +3,12 @@ from __future__ import annotations
 import asyncio
 
 import pytest
+from mcp.server.fastmcp.exceptions import ToolError
 
 from writer import __version__
+from writer import mcp_server
 from writer.mcp_server import TOOL_NAMES, WriterTools, build_server
+from writer.schemas import VoiceSampleContract
 from writer.storage import WriterStore
 
 
@@ -28,6 +31,25 @@ EXPECTED_TOOLS = {
     "scan_voice",
     "writer_status",
 }
+
+
+def test_mcp_cli_help_and_unknown_flags_never_start_the_server(
+    monkeypatch, capsys
+):
+    def unexpected_server():
+        pytest.fail("help or an invalid flag must not start blocking stdio")
+
+    monkeypatch.setattr(mcp_server, "build_server", unexpected_server)
+
+    assert mcp_server.run(["--help"]) == 0
+    help_output = capsys.readouterr()
+    assert "usage: writer serve-mcp [--print-config]" in help_output.out
+    assert help_output.err == ""
+
+    assert mcp_server.run(["--unknown"]) == 2
+    error_output = capsys.readouterr()
+    assert "unknown argument '--unknown'" in error_output.err
+    assert "usage: writer serve-mcp [--print-config]" in error_output.err
 
 
 def test_mcp_surface_is_product_owned_and_complete():
@@ -108,6 +130,144 @@ def test_mcp_script_critique_two_phase(tmp_path):
 
 
 @pytest.mark.parametrize(
+    ("call", "error"),
+    [
+        (lambda tools: tools.get_draft(True), "draft_id"),
+        (lambda tools: tools.list_pieces(limit="1"), "limit"),
+        (lambda tools: tools.critique_script(True), "script_id"),
+        (
+            lambda tools: tools.revise_script(
+                1, critique_id="1"),
+            "critique_id",
+        ),
+        (lambda tools: tools.derive_shot_list(False), "script_id"),
+        (
+            lambda tools: tools.export_shot_list(
+                "1", "must-not-exist.md"),
+            "script_id",
+        ),
+        (
+            lambda tools: tools.list_voice_samples(
+                active_only="false"),
+            "active_only",
+        ),
+    ],
+)
+def test_direct_scalar_aliases_fail_before_domain_work(
+        tmp_path, monkeypatch, call, error):
+    monkeypatch.chdir(tmp_path)
+    store = WriterStore.open(tmp_path / "writer.db")
+    try:
+        result = call(WriterTools(store))
+
+        assert result["ok"] is False
+        assert error in result["error"]
+        assert not (tmp_path / "must-not-exist.md").exists()
+    finally:
+        store.close()
+
+
+@pytest.mark.parametrize("bad_id", [True, False, "1", 1.0, None, [], {}])
+def test_remove_voice_sample_rejects_alias_without_deleting(
+        tmp_path, bad_id):
+    store = WriterStore.open(tmp_path / "writer.db")
+    try:
+        sample = store.add_voice_sample(VoiceSampleContract(
+            name="Keep me",
+            source_type="text",
+            raw_text="A measured local voice sample.",
+        ))
+
+        result = WriterTools(store).remove_voice_sample(bad_id)
+
+        assert result == {
+            "ok": False,
+            "error": "sample_id must be a positive integer",
+        }
+        assert store.get_voice_sample(sample.id) == sample
+    finally:
+        store.close()
+
+
+@pytest.mark.parametrize(
+    ("tool_name", "arguments"),
+    [
+        (
+            "prepare_draft",
+            {
+                "kind": "blog",
+                "brief": "Measured note.",
+                "target_length": True,
+            },
+        ),
+        (
+            "prepare_draft",
+            {
+                "kind": "blog",
+                "brief": "Measured note.",
+                "voice_sample_ids": ["1"],
+            },
+        ),
+        ("get_draft", {"draft_id": "1"}),
+        ("list_pieces", {"limit": True}),
+        ("critique_script", {"script_id": "1"}),
+        (
+            "revise_script",
+            {"script_id": 1, "critique_id": "1"},
+        ),
+        ("derive_shot_list", {"script_id": False}),
+        (
+            "export_shot_list",
+            {"script_id": "1", "output": "must-not-exist.md"},
+        ),
+        ("list_voice_samples", {"active_only": "false"}),
+        ("remove_voice_sample", {"sample_id": "1"}),
+    ],
+)
+def test_fastmcp_rejects_scalar_aliases(
+        tmp_path, monkeypatch, tool_name, arguments):
+    monkeypatch.chdir(tmp_path)
+    store = WriterStore.open(tmp_path / "writer.db")
+    try:
+        server = build_server(WriterTools(store))
+
+        async def call_tool():
+            return await server._tool_manager.call_tool(
+                tool_name,
+                arguments,
+                convert_result=False,
+            )
+
+        with pytest.raises(ToolError):
+            asyncio.run(call_tool())
+        assert not (tmp_path / "must-not-exist.md").exists()
+    finally:
+        store.close()
+
+
+def test_fastmcp_strict_scalars_keep_the_public_schema(tmp_path):
+    store = WriterStore.open(tmp_path / "writer.db")
+    try:
+        server = build_server(WriterTools(store))
+        tools = {
+            tool.name: tool.inputSchema
+            for tool in asyncio.run(server.list_tools())
+        }
+
+        assert tools["remove_voice_sample"]["properties"]["sample_id"][
+            "type"] == "integer"
+        assert tools["list_voice_samples"]["properties"]["active_only"][
+            "type"] == "boolean"
+        assert tools["prepare_draft"]["properties"]["voice_sample_ids"][
+            "anyOf"][0] == {
+                "items": {"type": "integer"},
+                "type": "array",
+            }
+    finally:
+        store.close()
+
+
+@pytest.mark.parametrize(
     ("method", "payload"),
     [
         (
@@ -149,6 +309,98 @@ def test_nested_payload_errors_remain_tool_data(tmp_path, method, payload):
         result = getattr(WriterTools(store), method)(payload)
         assert result["ok"] is False
         assert result["error"].startswith("invalid request: ")
+    finally:
+        store.close()
+
+
+@pytest.mark.parametrize(
+    ("script", "error"),
+    [
+        (
+            {
+                "hook": "Hook.",
+                "beats": [{"label": 123, "content": []}],
+            },
+            "beat.label must be a string",
+        ),
+        (
+            {
+                "hook": "Hook.",
+                "shots": [{
+                    "scene": True,
+                    "label": "proof",
+                    "cues": ["wide"],
+                }],
+            },
+            "shot.scene must be positive",
+        ),
+        (
+            {
+                "hook": "Hook.",
+                "shots": [{
+                    "scene": 1,
+                    "label": "proof",
+                    "cues": "wide",
+                }],
+            },
+            "shot.cues must be a list of strings",
+        ),
+        (
+            {
+                "hook": "Hook.",
+                "shots": [{
+                    "scene": 1,
+                    "label": "proof",
+                    "cues": ["wide"],
+                    "notes": [],
+                }],
+            },
+            "shot.notes must be a string",
+        ),
+    ],
+)
+def test_malformed_nested_script_fields_are_not_persisted(
+        tmp_path, script, error):
+    store = WriterStore.open(tmp_path / "writer.db")
+    try:
+        result = WriterTools(store).save_script(script)
+
+        assert result["ok"] is False
+        assert result["error"] == error
+        assert store.list_scripts() == []
+    finally:
+        store.close()
+
+
+@pytest.mark.parametrize(
+    "provider_ref",
+    (
+        "uoink://item/a b",
+        "uoink://item/%41",
+        "uoink://item/%e2%9c%93",
+        "uoink://item/" + "a" * 201,
+    ),
+)
+def test_save_draft_rejects_alias_uoink_refs_without_persistence(
+    tmp_path, provider_ref
+):
+    store = WriterStore.open(tmp_path / "writer.db")
+    try:
+        result = WriterTools(store).save_draft({
+            "kind": "blog",
+            "body": "Body.",
+            "sources": [{
+                "provider": "uoink",
+                "provider_ref": provider_ref,
+            }],
+        })
+
+        assert result["ok"] is False
+        assert "identify one uoink://item/<id>" in result["error"]
+        assert store.connection.execute(
+            "SELECT COUNT(*) FROM drafts").fetchone()[0] == 0
+        assert store.connection.execute(
+            "SELECT COUNT(*) FROM engagement_outbox").fetchone()[0] == 0
     finally:
         store.close()
 

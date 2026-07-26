@@ -172,6 +172,18 @@ class ScriptService:
             sources: list[SourceSnapshot] | None = None,
             assembly_query: AssemblyQuery | None = None,
             parent_id: int | None = None) -> ScriptContract:
+        if parent_id is not None and (
+                isinstance(parent_id, bool)
+                or not isinstance(parent_id, int)
+                or parent_id < 1):
+            raise ValueError(
+                "script.parent_id must be null or a positive integer")
+        if not isinstance(hook, str):
+            raise ValueError("script.hook must be a string")
+        for field, value in (
+                ("format", format), ("body", body), ("cta", cta)):
+            if value is not None and not isinstance(value, str):
+                raise ValueError(f"script.{field} must be a string or null")
         parent = None
         if parent_id is not None:
             parent = self.store.get_script(parent_id)
@@ -285,6 +297,10 @@ class ScriptService:
         script = self.store.get_script(script_id)
         if script is None:
             raise ValueError(f"script not found: {script_id}")
+        if not script.beats:
+            raise ValueError(
+                "script has no beats; add at least one beat before "
+                "deriving shots")
         cues = FORMAT_DEFAULTS.get(
             script.format, ["wide", "close-up", "b-roll"])
         shots = [

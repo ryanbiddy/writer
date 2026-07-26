@@ -40,8 +40,11 @@ class JsonContract:
             self.to_dict(), ensure_ascii=False, **kwargs)
 
 
-def _version(value: int, label: str) -> None:
-    if value != SCHEMA_VERSION:
+def _version(value: Any, label: str) -> None:
+    if (
+            isinstance(value, bool)
+            or not isinstance(value, int)
+            or value != SCHEMA_VERSION):
         raise SchemaError(
             f"{label}.schema_version must be {SCHEMA_VERSION}")
 
@@ -96,6 +99,9 @@ class SourceSnapshot(JsonContract):
 
     def validate(self) -> "SourceSnapshot":
         _version(self.schema_version, "source")
+        if not isinstance(self.credit_required, bool):
+            raise SchemaError(
+                "source.credit_required must be a boolean")
         if self.provider not in SOURCE_PROVIDERS:
             raise SchemaError(
                 "source.provider must be one of "
@@ -115,8 +121,10 @@ class SourceSnapshot(JsonContract):
                 or not encoded_id
                 or invalid_percent
                 or "/" in encoded_id
+                or len(item_id) > 200
                 or "/" in item_id
                 or "\\" in item_id
+                or urllib.parse.quote(item_id, safe="") != encoded_id
                 or parsed.params
                 or parsed.query
                 or parsed.fragment
@@ -159,8 +167,18 @@ class DraftContract(JsonContract):
     def validate(self) -> "DraftContract":
         _version(self.schema_version, "draft")
         _kind(self.kind)
+        if self.id is not None and (
+                isinstance(self.id, bool)
+                or not isinstance(self.id, int)
+                or self.id < 1):
+            raise SchemaError(
+                "draft.id must be null or a positive integer")
         if not isinstance(self.body, str):
             raise SchemaError("draft.body must be a string")
+        for field_name in ("title", "brief", "created_at", "updated_at"):
+            if not isinstance(getattr(self, field_name), str):
+                raise SchemaError(
+                    f"draft.{field_name} must be a string")
         for source in self.sources:
             source.validate()
         if any(
@@ -186,9 +204,19 @@ class Beat(JsonContract):
     content: str
     timecode: str = ""
 
+    def validate(self) -> "Beat":
+        for field_name, value in (
+                ("label", self.label),
+                ("content", self.content),
+                ("timecode", self.timecode)):
+            if not isinstance(value, str):
+                raise SchemaError(
+                    f"beat.{field_name} must be a string")
+        return self
+
     @classmethod
     def from_dict(cls, value: dict[str, Any]) -> "Beat":
-        return cls(**value)
+        return cls(**value).validate()
 
 
 @dataclass(frozen=True)
@@ -199,12 +227,21 @@ class Shot(JsonContract):
     notes: str = ""
 
     def validate(self) -> "Shot":
-        if self.scene < 1:
+        if (
+            isinstance(self.scene, bool)
+            or not isinstance(self.scene, int)
+            or self.scene < 1
+        ):
             raise SchemaError("shot.scene must be positive")
-        if not self.label.strip():
+        if not isinstance(self.label, str) or not self.label.strip():
             raise SchemaError("shot.label is required")
-        if any(not isinstance(value, str) for value in self.cues):
+        if (
+            not isinstance(self.cues, list)
+            or any(not isinstance(value, str) for value in self.cues)
+        ):
             raise SchemaError("shot.cues must be a list of strings")
+        if not isinstance(self.notes, str):
+            raise SchemaError("shot.notes must be a string")
         return self
 
     @classmethod
@@ -234,11 +271,43 @@ class PieceContract(JsonContract):
     def validate(self) -> "PieceContract":
         _version(self.schema_version, "piece")
         _kind(self.kind)
+        if self.parent_id is not None and (
+                isinstance(self.parent_id, bool)
+                or not isinstance(self.parent_id, int)
+                or self.parent_id < 1):
+            raise SchemaError(
+                "piece.parent_id must be null or a positive integer")
         if self.kind == "script":
             raise SchemaError(
                 "script output must use ScriptContract")
         if not isinstance(self.body, str) or not self.body:
             raise SchemaError("piece.body is required")
+        for field_name in ("title", "dek", "angle"):
+            if not isinstance(getattr(self, field_name), str):
+                raise SchemaError(
+                    f"piece.{field_name} must be a string")
+        for field_name in ("tags", "credit_lines"):
+            value = getattr(self, field_name)
+            if not isinstance(value, list) or any(
+                    not isinstance(item, str) for item in value):
+                raise SchemaError(
+                    f"piece.{field_name} must be a list of strings")
+        if not isinstance(self.voice_warnings, list) or any(
+                not isinstance(item, dict)
+                for item in self.voice_warnings):
+            raise SchemaError(
+                "piece.voice_warnings must be a list of objects")
+        if not isinstance(self.voice_sample_ids, list) or any(
+                isinstance(item, bool) or not isinstance(item, int)
+                for item in self.voice_sample_ids):
+            raise SchemaError(
+                "piece.voice_sample_ids must be a list of integers")
+        if self.target_length is not None and (
+                isinstance(self.target_length, bool)
+                or not isinstance(self.target_length, int)
+                or self.target_length < 1):
+            raise SchemaError(
+                "piece.target_length must be null or a positive integer")
         for source in self.sources:
             source.validate()
             if source.credit_required and source.credit_line not in (
@@ -359,6 +428,16 @@ class ScriptContract(JsonContract):
 
     def validate(self) -> "ScriptContract":
         _version(self.schema_version, "script")
+        if self.parent_id is not None and (
+                isinstance(self.parent_id, bool)
+                or not isinstance(self.parent_id, int)
+                or self.parent_id < 1):
+            raise SchemaError(
+                "script.parent_id must be null or a positive integer")
+        for field_name in ("hook", "format", "body", "cta"):
+            if not isinstance(getattr(self, field_name), str):
+                raise SchemaError(
+                    f"script.{field_name} must be a string")
         if not self.hook.strip():
             raise SchemaError("script.hook is required")
         if self.target_length_sec is not None and (
@@ -367,6 +446,8 @@ class ScriptContract(JsonContract):
                 or self.target_length_sec < 1):
             raise SchemaError(
                 "script.target_length_sec must be a positive integer")
+        for beat in self.beats:
+            beat.validate()
         for shot in self.shots:
             shot.validate()
         for source in self.sources:
@@ -445,6 +526,8 @@ class ShotListDocument(JsonContract):
                 f"{SHOT_LIST_DOCUMENT_TYPE}")
         if not self.hook.strip():
             raise SchemaError("shot-list.hook is required")
+        for beat in self.beats:
+            beat.validate()
         for shot in self.shots:
             shot.validate()
         if any(not isinstance(value, str) for value in self.credits):
@@ -480,6 +563,10 @@ class VoiceSampleContract(JsonContract):
 
     def validate(self) -> "VoiceSampleContract":
         _version(self.schema_version, "voice-sample")
+        for field_name in ("active", "default"):
+            if not isinstance(getattr(self, field_name), bool):
+                raise SchemaError(
+                    f"voice-sample.{field_name} must be a boolean")
         if not self.name.strip():
             raise SchemaError("voice-sample.name is required")
         if self.source_type not in self.SOURCE_TYPES:

@@ -174,6 +174,58 @@ def test_invalid_active_only_flag_returns_json(writer_http):
     }
 
 
+@pytest.mark.parametrize("bad_value", [0, 1, "false", None, [], {}])
+def test_invalid_source_credit_flag_does_not_persist_draft(
+        writer_http, bad_value):
+    status, payload = call(
+        writer_http,
+        "POST",
+        "/api/writer/v1/drafts",
+        {
+            "kind": "blog",
+            "body": "Local draft.",
+            "sources": [{
+                "provider": "url",
+                "source_url": "https://example.com/source",
+                "credit_required": bad_value,
+            }],
+        },
+    )
+
+    assert status == 400
+    assert payload["error"]["message"] == (
+        "source.credit_required must be a boolean")
+    status, drafts = call(
+        writer_http, "GET", "/api/writer/v1/drafts")
+    assert status == 200
+    assert drafts["data"]["drafts"] == []
+
+
+@pytest.mark.parametrize("field", ["active", "default"])
+@pytest.mark.parametrize("bad_value", [0, 1, "false", None, [], {}])
+def test_invalid_voice_sample_flag_does_not_persist(
+        writer_http, field, bad_value):
+    status, payload = call(
+        writer_http,
+        "POST",
+        "/api/writer/v1/voice-samples",
+        {
+            "name": "Fixture voice",
+            "source_type": "text",
+            "raw_text": "Name the measured result.",
+            field: bad_value,
+        },
+    )
+
+    assert status == 400
+    assert payload["error"]["message"] == (
+        f"voice-sample.{field} must be a boolean")
+    status, samples = call(
+        writer_http, "GET", "/api/writer/v1/voice-samples")
+    assert status == 200
+    assert samples["data"]["voice_samples"] == []
+
+
 def test_manual_draft_and_source_free_prepare_round_trip(writer_http):
     status, saved = call(writer_http, "POST", "/api/writer/v1/drafts", {
         "kind": "blog",
@@ -266,4 +318,7 @@ def test_ui_is_standalone_and_honest(writer_http):
     assert "Save draft" in text
     assert "Attach Uoink source" in text
     assert "Connect an AI through Writer's MCP server" in text
+    assert 'id="script-beats"' in text
+    assert "const beats=scriptBeats()" in text
+    assert 'format:$("format").value,beats,body:' in text
     assert "publish" not in text.casefold()

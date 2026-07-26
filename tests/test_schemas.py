@@ -97,6 +97,10 @@ def test_source_url_must_be_null_or_http(source_url):
         "uoink://item/one%2Ftwo",
         "uoink://item/bad%ZZ",
         "uoink://item/one?path=two",
+        "uoink://item/a b",
+        "uoink://item/%41",
+        "uoink://item/%e2%9c%93",
+        "uoink://item/" + "a" * 201,
         "file:///private/item",
     ),
 )
@@ -106,6 +110,15 @@ def test_uoink_reference_identifies_one_stable_item(provider_ref):
             provider="uoink",
             provider_ref=provider_ref,
         ).validate()
+
+
+def test_uoink_reference_accepts_canonical_percent_encoding():
+    source = SourceSnapshot(
+        provider="uoink",
+        provider_ref="uoink://item/a%20b",
+    ).validate()
+
+    assert source.provider_ref == "uoink://item/a%20b"
 
 
 def test_piece_retains_every_required_credit():
@@ -155,6 +168,32 @@ def test_script_and_shot_list_document_round_trip():
     assert payload["hook"] == script.hook
     assert payload["beats"][0]["label"] == "setup"
     assert payload["shots"][0]["scene"] == 1
+
+
+@pytest.mark.parametrize(
+    ("beat", "message"),
+    [
+        (Beat(123, "proof"), "beat.label"),
+        (Beat("proof", []), "beat.content"),
+        (Beat("proof", "show it", None), "beat.timecode"),
+    ],
+)
+def test_beat_contract_rejects_non_string_fields(beat, message):
+    with pytest.raises(SchemaError, match=message):
+        beat.validate()
+
+
+@pytest.mark.parametrize(
+    ("shot", "message"),
+    [
+        (Shot(True, "proof"), "shot.scene"),
+        (Shot(1, "proof", "wide"), "shot.cues"),
+        (Shot(1, "proof", ["wide"], []), "shot.notes"),
+    ],
+)
+def test_shot_contract_rejects_json_type_lookalikes(shot, message):
+    with pytest.raises(SchemaError, match=message):
+        shot.validate()
 
 
 def test_initial_migration_owns_no_uoink_tables():
