@@ -159,6 +159,12 @@ class DraftContract(JsonContract):
     def validate(self) -> "DraftContract":
         _version(self.schema_version, "draft")
         _kind(self.kind)
+        if self.id is not None and (
+                isinstance(self.id, bool)
+                or not isinstance(self.id, int)
+                or self.id < 1):
+            raise SchemaError(
+                "draft.id must be null or a positive integer")
         if not isinstance(self.body, str):
             raise SchemaError("draft.body must be a string")
         for source in self.sources:
