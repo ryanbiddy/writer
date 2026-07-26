@@ -45,9 +45,16 @@ def validate_composition(
     if not isinstance(blocks, list) or not blocks or any(
             not isinstance(block, str) for block in blocks):
         raise ValueError("blocks must be a non-empty list of strings")
+    if not isinstance(attribution_enabled, bool):
+        raise ValueError("attribution_enabled must be a boolean")
+    if credit_lines is not None and (
+            not isinstance(credit_lines, list)
+            or any(not isinstance(line, str) for line in credit_lines)):
+        raise ValueError(
+            "credit_lines must be null or a list of strings")
     credits = [
-        str(line).strip() for line in (credit_lines or [])
-        if str(line).strip()
+        line.strip() for line in (credit_lines or [])
+        if line.strip()
     ]
     footer = "\n".join(dict.fromkeys(credits)) \
         if attribution_enabled else ""
@@ -78,7 +85,7 @@ def validate_composition(
     return {
         "kind": kind,
         "limit": limit,
-        "attribution_enabled": bool(attribution_enabled),
+        "attribution_enabled": attribution_enabled,
         "footer_text": footer,
         "total_blocks": len(blocks),
         "blocks": rows,
