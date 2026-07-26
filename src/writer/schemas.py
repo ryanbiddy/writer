@@ -192,9 +192,19 @@ class Beat(JsonContract):
     content: str
     timecode: str = ""
 
+    def validate(self) -> "Beat":
+        for field_name, value in (
+                ("label", self.label),
+                ("content", self.content),
+                ("timecode", self.timecode)):
+            if not isinstance(value, str):
+                raise SchemaError(
+                    f"beat.{field_name} must be a string")
+        return self
+
     @classmethod
     def from_dict(cls, value: dict[str, Any]) -> "Beat":
-        return cls(**value)
+        return cls(**value).validate()
 
 
 @dataclass(frozen=True)
@@ -205,12 +215,21 @@ class Shot(JsonContract):
     notes: str = ""
 
     def validate(self) -> "Shot":
-        if self.scene < 1:
+        if (
+            isinstance(self.scene, bool)
+            or not isinstance(self.scene, int)
+            or self.scene < 1
+        ):
             raise SchemaError("shot.scene must be positive")
-        if not self.label.strip():
+        if not isinstance(self.label, str) or not self.label.strip():
             raise SchemaError("shot.label is required")
-        if any(not isinstance(value, str) for value in self.cues):
+        if (
+            not isinstance(self.cues, list)
+            or any(not isinstance(value, str) for value in self.cues)
+        ):
             raise SchemaError("shot.cues must be a list of strings")
+        if not isinstance(self.notes, str):
+            raise SchemaError("shot.notes must be a string")
         return self
 
     @classmethod
@@ -385,6 +404,8 @@ class ScriptContract(JsonContract):
                 or self.target_length_sec < 1):
             raise SchemaError(
                 "script.target_length_sec must be a positive integer")
+        for beat in self.beats:
+            beat.validate()
         for shot in self.shots:
             shot.validate()
         for source in self.sources:
@@ -463,6 +484,8 @@ class ShotListDocument(JsonContract):
                 f"{SHOT_LIST_DOCUMENT_TYPE}")
         if not self.hook.strip():
             raise SchemaError("shot-list.hook is required")
+        for beat in self.beats:
+            beat.validate()
         for shot in self.shots:
             shot.validate()
         if any(not isinstance(value, str) for value in self.credits):
