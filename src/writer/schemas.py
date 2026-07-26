@@ -239,6 +239,32 @@ class PieceContract(JsonContract):
                 "script output must use ScriptContract")
         if not isinstance(self.body, str) or not self.body:
             raise SchemaError("piece.body is required")
+        for field_name in ("title", "dek", "angle"):
+            if not isinstance(getattr(self, field_name), str):
+                raise SchemaError(
+                    f"piece.{field_name} must be a string")
+        for field_name in ("tags", "credit_lines"):
+            value = getattr(self, field_name)
+            if not isinstance(value, list) or any(
+                    not isinstance(item, str) for item in value):
+                raise SchemaError(
+                    f"piece.{field_name} must be a list of strings")
+        if not isinstance(self.voice_warnings, list) or any(
+                not isinstance(item, dict)
+                for item in self.voice_warnings):
+            raise SchemaError(
+                "piece.voice_warnings must be a list of objects")
+        if not isinstance(self.voice_sample_ids, list) or any(
+                isinstance(item, bool) or not isinstance(item, int)
+                for item in self.voice_sample_ids):
+            raise SchemaError(
+                "piece.voice_sample_ids must be a list of integers")
+        if self.target_length is not None and (
+                isinstance(self.target_length, bool)
+                or not isinstance(self.target_length, int)
+                or self.target_length < 1):
+            raise SchemaError(
+                "piece.target_length must be null or a positive integer")
         for source in self.sources:
             source.validate()
             if source.credit_required and source.credit_line not in (
