@@ -359,6 +359,10 @@ class ScriptContract(JsonContract):
 
     def validate(self) -> "ScriptContract":
         _version(self.schema_version, "script")
+        for field_name in ("hook", "format", "body", "cta"):
+            if not isinstance(getattr(self, field_name), str):
+                raise SchemaError(
+                    f"script.{field_name} must be a string")
         if not self.hook.strip():
             raise SchemaError("script.hook is required")
         if self.target_length_sec is not None and (
