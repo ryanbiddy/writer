@@ -21,6 +21,27 @@ COMPOSITION_LIMITS = {
 }
 
 
+def _optional_string_list(value: Any, field: str) -> list[str]:
+    if value is None:
+        return []
+    if not isinstance(value, list) or any(
+            not isinstance(item, str) for item in value):
+        raise ValueError(
+            f"piece.{field} must be null or a list of strings")
+    return list(value)
+
+
+def _optional_integer_list(value: Any, field: str) -> list[int]:
+    if value is None:
+        return []
+    if not isinstance(value, list) or any(
+            isinstance(item, bool) or not isinstance(item, int)
+            for item in value):
+        raise ValueError(
+            f"piece.{field} must be null or a list of integers")
+    return list(value)
+
+
 def _source_context(sources: list[SourceSnapshot]) -> list[dict[str, Any]]:
     return [
         {
@@ -210,8 +231,23 @@ class WritingService:
             target_length: int | None = None,
             parent_id: int | None = None,
             scan_voice: bool = True) -> PieceContract:
+        for field, value in (
+                ("title", title), ("dek", dek), ("angle", angle)):
+            if not isinstance(value, str):
+                raise ValueError(f"piece.{field} must be a string")
+        tag_list = _optional_string_list(tags, "tags")
+        credits = _optional_string_list(credit_lines, "credit_lines")
+        sample_ids = _optional_integer_list(
+            voice_sample_ids, "voice_sample_ids")
+        if target_length is not None and (
+                isinstance(target_length, bool)
+                or not isinstance(target_length, int)
+                or target_length < 1):
+            raise ValueError(
+                "piece.target_length must be null or a positive integer")
+        if not isinstance(scan_voice, bool):
+            raise ValueError("piece.scan_voice must be a boolean")
         source_list = list(sources or [])
-        sample_ids = list(voice_sample_ids or [])
         self._voice_samples(sample_ids)
         warnings = voice_dna.scan(body) if scan_voice else []
         piece = PieceContract(
@@ -219,9 +255,9 @@ class WritingService:
             body=body,
             title=title,
             dek=dek,
-            tags=list(tags or []),
+            tags=tag_list,
             sources=source_list,
-            credit_lines=list(credit_lines or []),
+            credit_lines=credits,
             voice_warnings=warnings,
             voice_sample_ids=sample_ids,
             angle=angle,
