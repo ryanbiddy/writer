@@ -2,11 +2,32 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 .venv/
+venv/
 dist/
 build/
 *.egg-info/
 *.db
 *.db-shm
 *.db-wal
-.writer-token
 
+# Local credentials and environment. Writer mints its own loopback token
+# (src/writer/auth.py); it must never be committed.
+.writer-token
+writer.token
+*.token
+.env
+.env.*
+!.env.example
+.pypirc
+.netrc
+
+# Internal orchestration notes. handoff/ exists on the maintainer's machine
+# and is deliberately not published; ignoring it keeps `git add -A` safe.
+handoff/
+worktrees/
+
+# Editor and OS noise
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
