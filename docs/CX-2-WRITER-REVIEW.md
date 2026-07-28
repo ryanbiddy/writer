@@ -19,8 +19,8 @@ The source-URL enforcement in Writer PR #5 is also the implementation I would
 choose. It centralizes one validator, rejects non-HTTP(S) values at both
 boundaries, preserves the contract's null representation, and normalizes the
 pre-launch empty-string form on read. I found no code change to request there.
-Its six jobs did not execute because the repository owner's GitHub account had
-a billing or spending-limit block; that is an external gate, not a test result.
+Its six jobs did not execute because CI was unavailable at the time; that is an
+external gate, not a test result.
 
 ## Boundary proof
 
