@@ -170,10 +170,13 @@ def _is_service_ui_path(value: Any) -> bool:
 
 
 def _capabilities(value: Any, *, code: str) -> list[str]:
+    # Version 1 requires these three. A newer Uoink may advertise more (for
+    # example uoink.capture/1); Writer ignores capabilities it doesn't use.
     if (
         not isinstance(value, list)
+        or not all(isinstance(item, str) and item for item in value)
         or value != sorted(set(value))
-        or tuple(value) != UOINK_CAPABILITIES
+        or not set(UOINK_CAPABILITIES) <= set(value)
     ):
         raise _error(code, "Uoink capabilities do not match version 1")
     return value
